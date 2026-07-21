@@ -2,7 +2,7 @@
 
 **Dzmitry Malyshau, Claude, Codex**
 
-*Draft v0.8 — 2026-07-21 (numbers frozen against retained run manifests)*
+*2026-07-21*
 
 Code: [github.com/kvark/cortex-actor](https://github.com/kvark/cortex-actor) · Weights: [huggingface.co/mad-bot/cortex](https://huggingface.co/mad-bot/cortex) · Video: [youtu.be/Ou9NAmFoCOM](https://youtu.be/Ou9NAmFoCOM)
 
@@ -231,6 +231,10 @@ No system completes E1M1 under the engine-verified observer, ours included; Cort
 Everything needed to load and run the policy is public. The model implementation and the action-schema contract (the ordered key roster whose indices define the checkpoint's channel layout) are released at [github.com/kvark/cortex-actor](https://github.com/kvark/cortex-actor) under MIT. The trained production checkpoint — weights, architecture arguments, and the embedded action schema, exactly the artifact evaluated in §6 — is at [huggingface.co/mad-bot/cortex](https://huggingface.co/mad-bot/cortex) (43.9 MB fp32; the frozen DINOv3 encoder is obtained separately from Meta under its own license). A recorded episode of this checkpoint playing E1M1 is at [youtu.be/Ou9NAmFoCOM](https://youtu.be/Ou9NAmFoCOM).
 
 The training corpus is public (`elefantai/p2p-full-data`). Training is one epoch on one consumer GPU (~3 hours of optimization at ~2,600 samples/s). Baselines use official released checkpoints and inference code. Evaluation batches, manifests, per-episode traces, and contact sheets are retained for every number in this paper.
+
+## AI assistance disclosure
+
+The development of this work was heavily AI-assisted. The model implementation, training and evaluation tooling, the experiments themselves, and the text of this paper were produced in collaboration with Anthropic's Claude and OpenAI's Codex, working under the direction of the human author, who set the goals, reviewed the results, and takes responsibility for all claims. Claude and Codex are listed as authors to reflect the scale of that contribution. All quantitative results trace to retained run manifests as described in the Reproducibility section, independently of who — human or model — produced the code that generated them.
 
 ## References
 
