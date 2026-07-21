@@ -2,7 +2,7 @@
 
 **Dzmitry Malyshau, Claude, Codex**
 
-*Draft v0.7 — 2026-07-21 (numbers frozen against retained run manifests)*
+*Draft v0.8 — 2026-07-21 (numbers frozen against retained run manifests)*
 
 Code: [github.com/kvark/cortex-actor](https://github.com/kvark/cortex-actor) · Weights: [huggingface.co/mad-bot/cortex](https://huggingface.co/mad-bot/cortex) · Video: [youtu.be/Ou9NAmFoCOM](https://youtu.be/Ou9NAmFoCOM)
 
@@ -58,7 +58,7 @@ The checkpoint stores the full train/deploy contract (cadence, action alignment,
 
 ## 4. Data
 
-We train on the Quake subset of the publicly released Pixels2Play corpus (`elefantai/p2p-full-data`): **6,850 recordings, ~475 hours, 17.09M frames at 20 fps**, with ground-truth human keyboard/mouse capture. Frames are encoded once by the frozen vision stack; training streams cached features.
+We train on the Quake subset of the publicly released Pixels2Play corpus (`elefantai/p2p-full-data`): **6,850 recordings, ~475 hours, 17.09M frames at 20 fps**, with ground-truth human keyboard/mouse capture. Ground truth is a deliberate choice, not a convenience — our earlier attempt to build a Quake corpus with generalist-IDM pseudo-labels failed on label quality (§7.5). Frames are encoded once by the frozen vision stack; training streams cached features.
 
 - **Alignment.** Observation *i* is trained against the action interval beginning at *i+1* (matching the corpus's released loader semantics); the sampling stride (20 fps → 10 Hz) and offset are recorded in every data artifact and checkpoint.
 - **Sampling.** 129,262 training chunks; 4 deterministic, distinct 4-frame windows per chunk = 517,048 windows per epoch (3.27% of the 15.83M valid windows — coverage, not repetition, is the current frontier, §8).
@@ -102,7 +102,7 @@ Cortex runs under the identical environment, capture, and injection path at its 
 | Total kills | 32 | 28 | 2 | 0 |
 | Deaths | 15/20 | 18/20 | 0 | 2/5 |
 
-A representative Cortex episode (fresh spawn, temperature-1 decoding) is available at [youtu.be/Ou9NAmFoCOM](https://youtu.be/Ou9NAmFoCOM). The released P2P-150M averages 2,485 path units with 38% stagnation and 2 kills at 60 s; NitroGen's best episode reaches a straight-line displacement of 1,145 units with zero kills. Cortex's median straight-line displacement is 1,481 (max 2,526) with median path length 10,520 — while also fighting (≥1 kill in 19/20 episodes) and pressing the route-critical button in every episode. NitroGen has one *historical* visually-observed completion that predates the engine-verified observer and did not reproduce under it (0/5, Wilson 95% [0, 0.43]).
+A representative Cortex episode (fresh spawn, temperature-1 decoding) is available at [youtu.be/Ou9NAmFoCOM](https://youtu.be/Ou9NAmFoCOM). The released P2P-150M averages 2,485 path units with 38% stagnation and 2 kills at 60 s; NitroGen's best episode reaches a straight-line displacement of 1,145 units with zero kills. Cortex's median straight-line displacement is 1,481 (max 2,526) with median path length 10,520 — while also fighting (≥1 kill in 19/20 episodes) and pressing the route-critical button in every episode.
 
 ![Top-down player trajectories on E1M1 for all three systems.](figures/pose_traces.png)
 
@@ -208,11 +208,17 @@ Every distributional replacement we built was nevertheless *worse in play*. Clas
 
 Given §7.3's diagnosis, the obvious move is to supervise direction directly. Probes on the frozen visual features say the signal is there: a small MLP on frozen CLS features predicts *when* a large turn is about to happen well above chance (turn-occurrence balanced accuracy 0.61 vs 0.52 baseline, ≈8σ on ~2,000 held-out shards) and turn *direction* weakly but reliably (0.573 vs 0.526). Yet three attempts to distill that signal into the policy trunk as auxiliary losses — per-frame yaw-delta regression at two loss weights, future-cumulative-yaw regression, and future-yaw 3-class classification — all plateaued at or below chance on the same held-out probe distribution, *below what the frozen-feature probe extracts from the trunk's own inputs*. The classification variant actively degraded with training as it learned the class prior and stopped predicting rare events. Our reading: the BC objective competes with, and wins against, auxiliary signals for trunk capacity; joint aux heads on a BC trunk are a dead lane in this regime, and future work should change the policy's inputs or objective instead.
 
-### 7.5 Cross-game data
+### 7.5 Pseudo-labeled data from a generalist inverse-dynamics model
+
+Before adopting the ground-truth-labeled corpus, we tried the generalist recipe's data path ourselves: collect Quake gameplay video and pseudo-label the actions with a released ~1B-parameter generalist inverse-dynamics model — the same class of labeler behind NitroGen's ~40,000-hour corpus. The label quality, measured after the fact, was disqualifying. Across the labeled recordings, **43% contained no keyboard predictions at all** and another 16% were sparse (fewer than 30 key events per recording); only 37% carried rich keyboard labels. Spot-checking the failures against the source videos showed footage with obvious continuous movement and firing labeled with *zero* key events. The aggregate distortion was severe: in the resulting training cache, the forward key — the single most-held key in real FPS play — became the *rarest* labeled event (0.69 presses per 1,000 events, roughly 40× sparser than ground-truth input capture of comparable play). A policy cloned from these labels faithfully learned the corruption: it treated pressing forward as an exceptional event and idled in place at deploy. As a secondary economics note, pseudo-labeling is not cheap to escape from either — on our single consumer GPU the labeler ran ~50–100× slower per clip than the multi-GPU serving cluster used to produce such corpora at scale, so re-labeling our way out of the quality problem was not an option.
+
+We do not claim NitroGen's corpus has this failure rate — its labeler, filtering, and games differ, and we measured only our own attempt. But the episode is a concrete, checkable instance of the recipe's known structural cost: IDM pseudo-labels fail *silently*, the failures are systematically biased (here, against sustained key holds), and behavior cloning transmits the bias directly into the policy. Ground-truth input capture — the Pixels2Play corpus's defining property, and the reason we train on it — removes this entire failure class.
+
+### 7.6 Cross-game data
 
 On a pre-DINOv3 iteration of this project we trained the same Quake policy with and without an additional multi-game FPS corpus (27 titles, each with its own key-binding conventions) mixed into training. Removing the cross-game data *improved* Quake offline action accuracy by 29% and loss by 18% on the identically selected checkpoint — the multi-game mixture had biased the shared action head toward other games' control conventions. This is a small, dated data point, but it is a direct measurement of a tax the generalist recipe pays by default, and it is why every subsequent iteration trained on Quake alone.
 
-### 7.6 General lessons
+### 7.7 General lessons
 
 Two general lessons. First, **offline imitation metrics anti-correlate with closed-loop ability** often enough that they cannot select checkpoints; only live batches can. This recurred independently in the spatial-density ablations (§7 table), the mouse-head line (offline checkpoint ranking inverted the closed-loop ranking), and the epoch-scaling probe. Second, the binding constraint is **off-distribution recovery** — the policy is competent on human-like states and unreliable on its own wall/corner/water states — and no amount of spatial detail or optimization on human states has moved it.
 
