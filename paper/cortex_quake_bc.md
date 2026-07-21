@@ -1,6 +1,6 @@
 # Cortex: An 11M-Parameter Specialist Policy Outperforms Foundation-Scale Gaming Agents on Quake
 
-**Dzmitry Malyshau, Claude, Codex**
+**Dzmitry Malyshau**
 
 *2026-07-21*
 
@@ -234,7 +234,7 @@ The training corpus is public (`elefantai/p2p-full-data`). Training is one epoch
 
 ## AI assistance disclosure
 
-The development of this work was heavily AI-assisted. The model implementation, training and evaluation tooling, the experiments themselves, and the text of this paper were produced in collaboration with Anthropic's Claude and OpenAI's Codex, working under the direction of the human author, who set the goals, reviewed the results, and takes responsibility for all claims. Claude and Codex are listed as authors to reflect the scale of that contribution. All quantitative results trace to retained run manifests as described in the Reproducibility section, independently of who — human or model — produced the code that generated them.
+The development of this work was heavily AI-assisted. The model implementation, training and evaluation tooling, the experiments themselves, and the text of this paper were produced in collaboration with Anthropic's Claude and OpenAI's Codex, working under the direction of the author, who set the goals, reviewed the results, and takes responsibility for all claims. The scale of that contribution goes well beyond conventional tool use, and this section, rather than the author list, is where it is credited. All quantitative results trace to retained run manifests as described in the Reproducibility section, independently of who — human or model — produced the code that generated them.
 
 ## References
 
