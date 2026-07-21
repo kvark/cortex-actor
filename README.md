@@ -12,6 +12,18 @@ Cortex is a compact behavioral-cloning game policy: **10.98M trainable parameter
 
 Per 100 ms decision: each 640×400 frame is encoded by frozen DINOv3 into a CLS token plus an ordered 5×8 spatial sample of the 25×40 patch grid (41 tokens × 384-d). The last 4 frames (300 ms) pass through a 6-layer, 384-d, 6-head bidirectional transformer encoder; the last frame's CLS position feeds two heads: 36 independent held-state logits (33 keys + 3 mouse buttons, absolute state, temperature-1 sampled at deploy) and tanh-squashed continuous mouse dx/dy. There is no previous-action input, pose, map, text, auxiliary loss, or game-specific rule.
 
+```mermaid
+flowchart LR
+    F["frame 640×400<br>10 Hz"] --> D["DINOv3 ViT-S+/16<br>frozen · 28.7M"]
+    D --> T["CLS + 5×8 patch sample<br>41 tokens × 384-d"]
+    T --> W["last 4 frames<br>164 tokens · 300 ms"]
+    W --> X["transformer encoder<br>6 layers · d=384 · 6 heads<br>bidirectional · 10.98M trainable"]
+    X --> H["held-state head<br>36 Bernoulli logits<br>33 keys + 3 buttons"]
+    X --> M["mouse head<br>tanh dx/dy × (500, 250)"]
+    H --> S["temperature-1 sample<br>diff vs previous state<br>→ press/release events"]
+    M --> E["relative mouse motion"]
+```
+
 ## Weights
 
 The trained Quake checkpoint is published at **[huggingface.co/mad-bot/cortex](https://huggingface.co/mad-bot/cortex)** (`cortex_quake_bc.pt`, fp32, 43.9 MB — weights, architecture arguments, and the embedded action schema; the frozen DINOv3 encoder is downloaded separately).
