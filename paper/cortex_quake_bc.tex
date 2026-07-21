@@ -49,15 +49,15 @@ Contributions:
 
 \section{Related work}\label{sec:related}
 
-\paragraph{Generalist gaming VLAs.} NitroGen~\cite{nitrogen} couples a SigLIP2-L vision tower with a flow-matching (DiT) action decoder that emits 18-step gamepad chunks; training data is ${\sim}40{,}000$\,h of internet video with actions pseudo-labeled by an inverse-dynamics model (${\sim}15$B frames). Pixels2Play~\cite{p2p} is a decoder-only transformer ($d{=}1024$, 10 layers, 200-frame context) over one EfficientNet-B0 token per frame, with an autoregressive action head over a 20-key vocabulary and binned mouse deltas; its ${\sim}8{,}000$\,h corpus is human play with ground-truth input capture. Minecraft agents (VPT, STEVE-1, and the goal-conditioned Pan family~\cite{pan}) established the video-pretrain and hindsight-goal toolbox; we borrow their emphasis on closed-loop evaluation over proxy metrics.
+\paragraph{Generalist gaming VLAs.} NitroGen~\cite{nitrogen} couples a SigLIP2-L~\cite{siglip2} vision tower with a flow-matching (DiT) action decoder that emits 18-step gamepad chunks; training data is ${\sim}40{,}000$\,h of internet video with actions pseudo-labeled by an inverse-dynamics model (${\sim}15$B frames). Pixels2Play~\cite{p2p} is a decoder-only transformer ($d{=}1024$, 10 layers, 200-frame context) over one EfficientNet-B0~\cite{efficientnet} token per frame, with an autoregressive action head over a 20-key vocabulary and binned mouse deltas; its ${\sim}8{,}000$\,h corpus is human play with ground-truth input capture. Minecraft agents (VPT~\cite{vpt}, STEVE-1~\cite{steve1}, and the goal-conditioned Pan family~\cite{pan}) established the video-pretrain and hindsight-goal toolbox; we borrow their emphasis on closed-loop evaluation over proxy metrics.
 
-\paragraph{Frozen-feature control.} Our design follows the growing evidence that frozen self-supervised vision features (the DINO family) transfer to control without fine-tuning. We push this to the extreme: the policy never sees a pixel; it is trained and deployed entirely on cached or streamed DINOv3 activations.
+\paragraph{Frozen-feature control.} Our design follows the growing evidence that frozen self-supervised vision features (the DINO family~\cite{dino,dinov2,dinov3}) transfer to control without fine-tuning. We push this to the extreme: the policy never sees a pixel; it is trained and deployed entirely on cached or streamed DINOv3 activations.
 
 \section{Architecture}\label{sec:arch}
 
 Cortex is deliberately minimal. Per 100\,ms decision:
 \begin{itemize}
-\item \textbf{Vision.} Each 640\x400 frame is encoded by frozen DINOv3 ViT-S+/16 (bf16) into a 25\x40 patch grid plus a CLS token. We keep CLS and an ordered 5\x8 uniform spatial sample of the patch grid: 41 tokens \x{} 384-d per frame. Nothing about this stage is Quake-specific.
+\item \textbf{Vision.} Each 640\x400 frame is encoded by frozen DINOv3 ViT-S+/16~\cite{dinov3} (bf16) into a 25\x40 patch grid plus a CLS token. We keep CLS and an ordered 5\x8 uniform spatial sample of the patch grid: 41 tokens \x{} 384-d per frame. Nothing about this stage is Quake-specific.
 \item \textbf{Trunk.} The last 4 frames (300\,ms span) give 164 tokens, plus learned per-token spatial and per-frame temporal embeddings, through a 6-layer, 384-d, 6-head, feed-forward-1536 bidirectional transformer encoder. The output at the last frame's CLS position is the policy summary.
 \item \textbf{Heads.} (a)~a linear \emph{held-state} head: 36 independent Bernoulli logits --- 33 keyboard keys plus 3 mouse buttons --- trained with BCE against the demonstrator's \emph{absolute} held state; (b)~two linear mouse heads emitting tanh-squashed continuous dx/dy, trained with smooth-L1 and scaled to ($\pm$500, $\pm$250) counts at deploy.
 \item \textbf{Decoding.} At deploy the held state is \emph{sampled} per channel at temperature 1 (we show in Section~\ref{sec:negative} that deterministic thresholding is a materially different --- worse --- policy), masked to the game's legal channels (Quake: \texttt{w a s d space} plus fire), and converted to press/release events by diffing against the previously executed state. There is no previous-action input, no memory beyond 300\,ms, no pose, no map, no text, no auxiliary loss, and no game-specific behavior rule.
@@ -100,9 +100,9 @@ We train on the Quake subset of the publicly released Pixels2Play corpus (\textt
 
 \section{Evaluation protocol}\label{sec:protocol}
 
-All systems play the same unmodified Quake build (vkQuake engine, 60\,Hz simulation) through the same virtual input device and the same frame-capture pipeline, with per-episode run manifests pinning checkpoint hashes and full command lines.
+All systems play the same build of Quake through the same virtual input device and the same frame-capture pipeline, with per-episode run manifests pinning checkpoint hashes and full command lines. The engine is vkQuake, a modern source port of the original game, which we extend with a read-only telemetry channel: each simulation tick, the engine exports the player's pose, health, kill count, and the level-to-intermission transition event. These modifications \emph{observe} game state --- they alter no game logic, physics, content, or difficulty, inject nothing, and are identical for every system (the shared mid-map start states of Section~\ref{sec:spawns} use the engine's stock save/load). The engine simulates at a fixed 60\,Hz tick, which sets the granularity of both simulation and action injection; each policy's decision cadence is an integer number of ticks (Cortex every 6 ticks $=$ 100\,ms, P2P every 3 ticks $=$ 50\,ms, NitroGen one chunk action per tick).
 
-\paragraph{Time-controlled execution.} Episodes are measured in \emph{simulated game time}: the engine's simulation advances only after the policy's action for the current observation has been injected, so every system acts at its native cadence (Cortex every 100\,ms of game time; P2P every 50\,ms; NitroGen's action chunks at 60\,Hz) regardless of how long its forward pass takes on our hardware. This is a necessity, not a convenience --- a single consumer GPU cannot run a 150M-parameter 20\,Hz policy, let alone a ${\sim}500$M flow-matching decoder, at wall-clock real time --- and it is also the conservative choice for the comparison: under time control no system ever acts on a stale frame or skips a decision, which removes inference latency as a confound and, if anything, favors the larger baselines relative to what their wall-clock real-time behavior would be. All reported durations (60\,s, 120\,s) are game-time seconds under this regime, identically for all three systems.
+\paragraph{Time-controlled execution.} The environment gates simulation on decisions: the engine advances only after the policy's action for the current observation has been injected, so episodes are measured in \emph{simulated game time} and every system meets its native cadence exactly, regardless of how long its forward pass takes. This is a deliberate feature of the evaluation environment, and it departs from how the baselines were originally demonstrated by their authors, which was wall-clock real time on dedicated hardware: P2P documents a two-GPU workstation (an RTX 5090 reserved for model inference plus an RTX 5080 for game rendering) and an end-to-end latency budget under 50\,ms; NitroGen's release does not document an evaluation hardware setup. Time control is what makes the comparison well-defined without that hardware: no system ever acts on a stale frame or skips a decision, so inference latency is removed as a confound entirely, and the baselines are, if anything, favored relative to their wall-clock behavior --- they receive their exact published cadence for free. It also lowers the replication bar substantially: every number in this paper, including Cortex's training, was produced on a \emph{single} RTX 5080 shared between the game and whichever policy is playing, with no latency engineering required to reproduce it. All reported durations (60\,s, 120\,s) are game-time seconds under this regime, identically for all three systems.
 
 \paragraph{Baseline harness.} Both baselines run their \emph{official released inference code end to end} --- we wrap it in the environment's observation/injection loop but do not reimplement any model-side processing or decoding:
 \begin{itemize}
@@ -339,7 +339,7 @@ The training corpus is public (\texttt{elefantai/p2p-full-data}). Training is on
 The development of this work was heavily AI-assisted. The model implementation, training and evaluation tooling, the experiments themselves, and the text of this paper were produced in collaboration with Anthropic's Claude and OpenAI's Codex, working under the direction of the author, who set the goals, reviewed the results, and takes responsibility for all claims. The scale of that contribution goes well beyond conventional tool use, and this section, rather than the author list, is where it is credited. All quantitative results trace to retained run manifests as described in the Reproducibility section, independently of who --- human or model --- produced the code that generated them.
 
 \small
-\begin{thebibliography}{9}
+\begin{thebibliography}{99}
 
 \bibitem{nitrogen}
 NVIDIA.
@@ -360,6 +360,41 @@ Pantograph.
 DeepMind SIMA team.
 \newblock Scaling Instructable Agents Across Many Simulated Worlds.
 \newblock arXiv:2404.10179, 2024.
+
+\bibitem{dinov3}
+O.~Sim\'eoni, H.~V. Vo, M.~Seitzer, F.~Baldassarre, M.~Oquab, et~al.
+\newblock DINOv3.
+\newblock arXiv:2508.10104, 2025.
+
+\bibitem{dinov2}
+M.~Oquab, T.~Darcet, T.~Moutakanni, H.~Vo, M.~Szafraniec, et~al.
+\newblock DINOv2: Learning Robust Visual Features without Supervision.
+\newblock arXiv:2304.07193, 2023.
+
+\bibitem{dino}
+M.~Caron, H.~Touvron, I.~Misra, H.~J\'egou, J.~Mairal, P.~Bojanowski, A.~Joulin.
+\newblock Emerging Properties in Self-Supervised Vision Transformers.
+\newblock arXiv:2104.14294, 2021.
+
+\bibitem{vpt}
+B.~Baker, I.~Akkaya, P.~Zhokhov, J.~Huizinga, J.~Tang, A.~Ecoffet, B.~Houghton, R.~Sampedro, J.~Clune.
+\newblock Video PreTraining (VPT): Learning to Act by Watching Unlabeled Online Videos.
+\newblock arXiv:2206.11795, 2022.
+
+\bibitem{steve1}
+S.~Lifshitz, K.~Paster, H.~Chan, J.~Ba, S.~McIlraith.
+\newblock STEVE-1: A Generative Model for Text-to-Behavior in Minecraft.
+\newblock arXiv:2306.00937, 2023.
+
+\bibitem{siglip2}
+M.~Tschannen, A.~Gritsenko, X.~Wang, M.~F. Naeem, I.~Alabdulmohsin, et~al.
+\newblock SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding, Localization, and Dense Features.
+\newblock arXiv:2502.14786, 2025.
+
+\bibitem{efficientnet}
+M.~Tan, Q.~V. Le.
+\newblock EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks.
+\newblock arXiv:1905.11946, 2019.
 
 \end{thebibliography}
 
