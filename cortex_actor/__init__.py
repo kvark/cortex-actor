@@ -6,6 +6,7 @@ absolute held-state logits, and continuous mouse regression. See the paper and
 the repository README for results and the evaluation protocol.
 """
 
+from .hub import from_hub
 from .model import (
     COMPACT_PATCH_GRID,
     DINO_PATCH_GRID,
@@ -28,6 +29,7 @@ __all__ = [
     "DINO_PATCH_GRID",
     "Cortex",
     "cortex_from_args",
+    "from_hub",
     "KEYS",
     "KEY_INDEX",
     "MOUSE_BUTTONS",

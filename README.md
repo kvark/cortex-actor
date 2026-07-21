@@ -31,17 +31,13 @@ The trained Quake checkpoint is published at **[huggingface.co/mad-bot/cortex](h
 ## Usage
 
 ```python
-import torch
-from huggingface_hub import hf_hub_download
-from cortex_actor import Cortex, cortex_from_args, N_HELD_STATE
+from cortex_actor import from_hub
 
-path = hf_hub_download("mad-bot/cortex", "cortex_quake_bc.pt")
-ck = torch.load(path, map_location="cpu", weights_only=False)
-model = cortex_from_args(ck["args_dict"])
-model.load_state_dict(ck["model"])
-model.eval()
+model, ck = from_hub("mad-bot/cortex")  # needs huggingface_hub
 # Inputs per step: cls (B, T, 384) and patches (B, T, 5, 8, 384) from frozen
-# DINOv3 ViT-S+/16 at 640x400; see the paper for the deploy loop contract.
+# DINOv3 ViT-S+/16 at 640x400; ck["action_schema"] holds the channel contract.
+# See the paper for the deploy loop.
+out = model(cls, patches=patches)
 ```
 
 The action-channel contract (key roster, held-state layout, mouse scales) lives in `cortex_actor/schema.py`; the index of a key in `KEYS` is its channel in the logits tensor, so the file is part of the architecture.
