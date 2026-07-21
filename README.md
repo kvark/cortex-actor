@@ -4,6 +4,10 @@
 
 Cortex is a compact behavioral-cloning game policy: **10.98M trainable parameters** over frozen [DINOv3 ViT-S+/16](https://huggingface.co/facebook/dinov3-vits16plus-pretrain-lvd1689m) features (39.7M parameters executed per decision including the frozen encoder). Trained with pure behavior cloning on the ~475-hour Quake subset of the public [Pixels2Play corpus](https://huggingface.co/datasets/elefantai/p2p-full-data) on a single consumer GPU, it reaches deeper engine-verified route progress on Quake E1M1 than the released P2P-150M and NitroGen (~500M) generalist gaming agents evaluated under the same protocol.
 
+[![Cortex playing Quake E1M1](docs/rollout.gif)](https://youtu.be/Ou9NAmFoCOM)
+
+*The production checkpoint playing E1M1 from a fresh spawn — [full run on YouTube](https://youtu.be/Ou9NAmFoCOM).*
+
 ## Architecture
 
 Per 100 ms decision: each 640×400 frame is encoded by frozen DINOv3 into a CLS token plus an ordered 5×8 spatial sample of the 25×40 patch grid (41 tokens × 384-d). The last 4 frames (300 ms) pass through a 6-layer, 384-d, 6-head bidirectional transformer encoder; the last frame's CLS position feeds two heads: 36 independent held-state logits (33 keys + 3 mouse buttons, absolute state, temperature-1 sampled at deploy) and tanh-squashed continuous mouse dx/dy. There is no previous-action input, pose, map, text, auxiliary loss, or game-specific rule.
