@@ -38,7 +38,7 @@ The action-channel contract (key roster, held-state layout, mouse scales) lives 
 
 ## Results
 
-On Quake E1M1 under an engine-verified evaluation protocol (completion counted only on the engine's level-transition event; N=20 stochastic episodes across 5 seeds, independently replicated), Cortex passes the opening door–button–gate sequence 20/20 and reaches route waypoint median 5–6 (max 9) with 28–32 kills per batch. The released P2P-150M and NitroGen baselines, run in the same environment with their official inference code and published settings at matched duration, stall at route waypoint median 1. Results generalize across additional maps and shared mid-map start states. No system, including ours, completes the level. Full numbers, controls, and negative results are in the paper (link forthcoming).
+On Quake E1M1 under an engine-verified evaluation protocol (completion counted only on the engine's level-transition event; N=20 stochastic episodes across 5 seeds, independently replicated), Cortex passes the opening door–button–gate sequence 20/20 and reaches route waypoint median 5–6 (max 9) with 28–32 kills per batch. The released P2P-150M and NitroGen baselines, run in the same environment with their official inference code and published settings at matched duration, stall at route waypoint median 1. Results generalize across additional maps and shared mid-map start states. No system, including ours, completes the level. Full numbers, controls, and negative results are in the paper: [**Cortex: An 11M-Parameter Specialist Policy Outperforms Foundation-Scale Gaming Agents on Quake**](paper/cortex_quake_bc.md).
 
 ## License
 
