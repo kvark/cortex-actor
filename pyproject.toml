@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cortex-actor"
+version = "0.1.0"
+description = "Cortex: a compact behavioral-cloning game policy over frozen DINOv3 features"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Dzmitry Malyshau" }]
+requires-python = ">=3.10"
+dependencies = ["torch>=2.0", "numpy"]
+
+[project.urls]
+Repository = "https://github.com/kvark/cortex-actor"
+
+[tool.setuptools.packages.find]
+include = ["cortex_actor*"]
