@@ -1,0 +1,283 @@
+{
+  "schema": 2,
+  "audited_on": "2026-07-22",
+  "provenance": {
+    "status": "Values were audited against retained training and evaluation manifests and summaries; those evaluator artifacts are not included in this policy release."
+  },
+  "corpus": {
+    "recordings": 6849,
+    "hours_approx": 474.7,
+    "source_fps": 20,
+    "source_frames_approx": 34175692,
+    "source_stride": 2,
+    "decision_fps": 10,
+    "cached_decision_frames": 17087846,
+    "train_chunks": 129262,
+    "valid_train_windows": 15828466,
+    "selected_train_windows": 517048,
+    "selected_fraction": 0.03266570487143517,
+    "validation_recordings": 342,
+    "valid_validation_windows": 844831
+  },
+  "model": {
+    "trainable_parameters": 10975142,
+    "frozen_encoder_parameters_approx": 28700000,
+    "total_parameters_approx": 39675142,
+    "release_sha256": "29c0e453fdfe7255bc6d8e64a0024fe9b617ed79917f5cd71b41f1173f1aa14b",
+    "selected_training_checkpoint_sha256": "be9bc51e84c0dbebd4a767762d83e508ee90230a3cd73cd06afb986d27c3808a",
+    "release_matches_selected_model_tensors": true
+  },
+  "evaluation_runtime": {
+    "engine": "instrumented vkQuake",
+    "engine_source_commit": "def85227e6089231f23c1fbc2ba5e9c454add833",
+    "engine_source_url": "https://github.com/kvark/vkQuake/tree/def85227e6089231f23c1fbc2ba5e9c454add833",
+    "engine_substep_ms": 16.666666666666668,
+    "engine_render_ceiling_hz": 61.2
+  },
+  "training": {
+    "optimizer_steps": 32320,
+    "samples_seen": 517048,
+    "elapsed_seconds": 198.78729677200317,
+    "samples_per_second": 2601.0112738392045,
+    "maximum_batch_size": 16,
+    "partial_worker_tail_batch_sizes": [8, 8, 8, 8, 8, 8, 4, 4]
+  },
+  "e1m1_fresh_spawn_120s": {
+    "cortex_production": {
+      "n": 20,
+      "routes": [7, 4, 5, 4, 5, 6, 4, 4, 5, 6, 5, 7, 6, 6, 9, 6, 5, 7, 4, 4],
+      "route_mean": 5.45,
+      "route_median": 5.0,
+      "route_maximum": 9,
+      "first_door": 20,
+      "button_room": 20,
+      "gate_descent": 20,
+      "episodes_with_kill": 19,
+      "total_kills": 32,
+      "deaths": 15,
+      "completions": 0
+    },
+    "cortex_replication": {
+      "n": 20,
+      "routes": [4, 4, 6, 6, 4, 7, 4, 6, 7, 7, 6, 4, 6, 5, 6, 4, 7, 6, 6, 5],
+      "route_mean": 5.5,
+      "route_median": 6.0,
+      "route_maximum": 7,
+      "first_door": 20,
+      "button_room": 20,
+      "gate_descent": 20,
+      "episodes_with_kill": 19,
+      "total_kills": 28,
+      "deaths": 18,
+      "completions": 0
+    },
+    "p2p_150m": {
+      "n": 5,
+      "routes": [1, 1, 3, 1, 2],
+      "chord_displacements": [913.55517578125, 1045.228515625, 1063.4705810546875, 919.1559448242188, 1044.642578125],
+      "path_lengths": [2189.56787109375, 5126.80615234375, 5172.14404296875, 4672.9482421875, 4985.638671875],
+      "longest_stationary_steps": [229, 438, 299, 137, 689],
+      "decision_ms": 50.0,
+      "kills_per_episode": [0, 0, 1, 0, 1],
+      "route_median": 1.0,
+      "route_maximum": 3,
+      "first_door": 2,
+      "button_room": 1,
+      "gate_descent": 0,
+      "episodes_with_kill": 2,
+      "total_kills": 2,
+      "deaths": 0,
+      "completions": 0,
+      "checkpoint_sha256": "2a3b43121144ca2d9c2b8aa605e313184c98ac5ef6d2c3b530c2d353d886c5bc"
+    },
+    "nitrogen": {
+      "n": 5,
+      "routes": [2, 1, 2, 0, 1],
+      "chord_displacements": [1043.8939208984375, 1042.635009765625, 1047.0887451171875, 299.2199401855469, 758.5078125],
+      "path_lengths": [4231.7333984375, 9170.03515625, 10982.9658203125, 4215.751953125, 11415.767578125],
+      "longest_stationary_steps": [256, 278, 337, 1159, 235],
+      "decision_ms": 16.666666666666668,
+      "kills_per_episode": [0, 0, 0, 0, 0],
+      "episode_outcomes": ["player_dead", "time_limit", "player_dead", "time_limit", "time_limit"],
+      "route_median": 1.0,
+      "route_maximum": 2,
+      "first_door": 2,
+      "button_room": 0,
+      "gate_descent": 0,
+      "episodes_with_kill": 0,
+      "total_kills": 0,
+      "deaths": 2,
+      "completions": 0,
+      "checkpoint_sha256": "a266f5fb9c7dbdcdf97216558d2d82075a9a994b824cda69afa9fd3280260a81"
+    }
+  },
+  "exploratory_additional_maps_120s": {
+    "e1m2": {
+      "cortex": {
+        "n": 5,
+        "chord_displacements": [791.1727294921875, 2007.6240234375, 581.29443359375, 728.7326049804688, 817.98974609375],
+        "survival_seconds": [25.1, 43.9, 6.0, 20.2, 83.1],
+        "total_kills": 6,
+        "deaths": 5,
+        "environment_truncations": 0,
+        "completions": 0
+      },
+      "p2p_150m": {
+        "n": 5,
+        "chord_displacements": [703.6722412109375, 784.1306762695312, 504.2576904296875, 315.79150390625, 791.3114013671875],
+        "survival_seconds": [65.5, 19.75, 37.1, 32.2, 120.0],
+        "total_kills": 4,
+        "deaths": 3,
+        "environment_truncations": 1,
+        "completions": 0
+      },
+      "nitrogen": {
+        "n": 5,
+        "chord_displacements": [797.1469116210938, 679.0430297851562, 691.8402709960938, 631.86572265625, 156.66429138183594],
+        "survival_seconds": [25.516666666666666, 41.233333333333334, 35.85, 25.833333333333332, 14.266666666666667],
+        "total_kills": 1,
+        "deaths": 5,
+        "environment_truncations": 0,
+        "completions": 0
+      }
+    },
+    "e1m3": {
+      "cortex": {
+        "n": 5,
+        "chord_displacements": [705.5147094726562, 881.486328125, 1125.87646484375, 668.7156982421875, 706.1409912109375],
+        "survival_seconds": [13.0, 13.9, 21.7, 10.8, 18.8],
+        "total_kills": 12,
+        "deaths": 5,
+        "environment_truncations": 0,
+        "completions": 0
+      },
+      "p2p_150m": {
+        "n": 5,
+        "chord_displacements": [48.93416976928711, 610.3062133789062, 669.091552734375, 657.5671997070312, 705.5023193359375],
+        "survival_seconds": [5.75, 44.95, 46.1, 97.0, 120.0],
+        "total_kills": 15,
+        "deaths": 3,
+        "environment_truncations": 1,
+        "completions": 0
+      },
+      "nitrogen": {
+        "n": 5,
+        "chord_displacements": [null, 392.49114990234375, 387.96673583984375, 528.6346435546875, 370.03515625],
+        "survival_seconds": [0.016666666666666666, 56.11666666666667, 57.43333333333333, 30.133333333333333, 91.75],
+        "total_kills": 0,
+        "deaths": 4,
+        "environment_truncations": 1,
+        "completions": 0
+      }
+    }
+  },
+  "exploratory_e1m1_mid_map_starts_120s": {
+    "notes": "Kills include one already present in each save; route indices are order-independent and include the starting region.",
+    "start_a": {
+      "cortex": {
+        "n": 4,
+        "routes": [5, 5, 6, 6],
+        "chord_displacements": [922.1616821289062, 950.0734252929688, 896.5845336914062, 915.6502685546875],
+        "survival_seconds": [49.7, 43.8, 59.4, 120.0],
+        "total_kills_including_save": 5,
+        "new_kills": 1,
+        "deaths": 3,
+        "completions": 0
+      },
+      "p2p_150m": {
+        "n": 5,
+        "routes": [4, 7, 5, 6, 0],
+        "chord_displacements": [154.1998748779297, 1374.611083984375, 483.6988525390625, 797.5253295898438, 51.58310317993164],
+        "survival_seconds": [120.0, 120.0, 20.25, 120.0, 14.2],
+        "total_kills_including_save": 9,
+        "new_kills": 4,
+        "deaths": 2,
+        "completions": 0
+      },
+      "nitrogen": {
+        "n": 5,
+        "routes": [5, 5, 6, 5, 6],
+        "chord_displacements": [681.2890014648438, 369.8692626953125, 730.7764892578125, 564.2753295898438, 660.9407348632812],
+        "survival_seconds": [23.066666666666666, 94.66666666666667, 21.133333333333333, 38.45, 25.333333333333332],
+        "total_kills_including_save": 7,
+        "new_kills": 2,
+        "deaths": 5,
+        "completions": 0
+      }
+    },
+    "start_b": {
+      "cortex": {
+        "n": 5,
+        "routes": [6, 7, 5, 6, 5],
+        "chord_displacements": [585.010009765625, 629.6641235351562, 628.0177612304688, 619.0694580078125, 715.9734497070312],
+        "survival_seconds": [15.9, 46.9, 11.4, 32.1, 60.2],
+        "total_kills_including_save": 7,
+        "new_kills": 2,
+        "deaths": 5,
+        "completions": 0
+      },
+      "p2p_150m": {
+        "n": 5,
+        "routes": [6, 7, 6, 7, 7],
+        "chord_displacements": [579.3375854492188, 683.9559326171875, 537.8863525390625, 652.3843994140625, 966.2140502929688],
+        "survival_seconds": [25.7, 10.65, 120.0, 120.0, 18.4],
+        "total_kills_including_save": 10,
+        "new_kills": 5,
+        "deaths": 3,
+        "completions": 0
+      },
+      "nitrogen": {
+        "n": 5,
+        "routes": [6, 5, 5, 5, 5],
+        "chord_displacements": [316.53271484375, 139.08493041992188, 195.92214965820312, 229.52378845214844, 406.476806640625],
+        "survival_seconds": [15.666666666666666, 9.216666666666667, 15.166666666666666, 10.866666666666667, 9.566666666666666],
+        "total_kills_including_save": 6,
+        "new_kills": 1,
+        "deaths": 5,
+        "completions": 0
+      }
+    }
+  },
+  "full_grid_ablation_two_batches": {
+    "n_per_model": 40,
+    "compact_5x8": {
+      "route_mean": 5.475,
+      "route_median": 6.0,
+      "route_maximum": 9,
+      "gate_descent": 40,
+      "episodes_with_kill": 38,
+      "total_kills": 60,
+      "deaths": 33,
+      "completions": 0
+    },
+    "full_25x40": {
+      "route_mean": 5.225,
+      "route_median": 5.0,
+      "route_maximum": 8,
+      "gate_descent": 35,
+      "episodes_with_kill": 36,
+      "total_kills": 77,
+      "deaths": 17,
+      "completions": 0
+    }
+  },
+  "recovery_weighting_paired_batch": {
+    "n_per_model": 20,
+    "compact_production": {
+      "route_mean": 5.45,
+      "route_median": 5.0,
+      "gate_descent": 20,
+      "episodes_with_kill": 19,
+      "deaths": 15,
+      "completions": 0
+    },
+    "recovery_weighted": {
+      "route_mean": 5.25,
+      "route_median": 6.0,
+      "gate_descent": 18,
+      "episodes_with_kill": 16,
+      "deaths": 10,
+      "completions": 0
+    }
+  }
+}
