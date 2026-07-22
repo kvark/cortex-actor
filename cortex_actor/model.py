@@ -294,6 +294,7 @@ class Cortex(nn.Module):
         use_action_context: bool = False,
         action_persistence_skip: bool = False,
         predict_taps: bool = False,
+        use_goal: bool = False,
     ):
         super().__init__()
         self.seq_len = seq_len
@@ -328,6 +329,18 @@ class Cortex(nn.Module):
         if use_ego:
             self.ego_proj = nn.Linear(EGO_FEAT_DIM, d_model)
             self.ego_pos = nn.Parameter(torch.randn(ego_k, d_model) * 0.02)
+
+        # Optional goal token: the DINOv3 CLS of a desired future view,
+        # hindsight-sampled during training. The goal is real data, not a
+        # learned latent — there is no codebook to collapse. When no goal is
+        # provided (goal dropout in training, unconditional deployment) a
+        # learned placeholder embedding takes the token's place, so the same
+        # checkpoint runs conditionally and unconditionally.
+        self.use_goal = use_goal
+        if use_goal:
+            self.goal_proj = nn.Linear(384, d_model)
+            self.goal_pos = nn.Parameter(torch.randn(1, d_model) * 0.02)
+            self.no_goal_emb = nn.Parameter(torch.zeros(d_model))
 
         # Optional previous-action token. The minimal BC baseline omits it;
         # older contextual checkpoints reconstruct the branch from metadata.
@@ -428,6 +441,8 @@ class Cortex(nn.Module):
         patches: torch.Tensor | None = None,  # (B, T, H, W, 384)
         return_hidden: bool = False,
         action_context: torch.Tensor | None = None,  # (B, N_HELD_STATE), previous state
+        goal: torch.Tensor | None = None,            # (B, 384) goal-frame CLS
+        goal_mask: torch.Tensor | None = None,       # (B,) bool; False -> no-goal placeholder
     ) -> dict[str, torch.Tensor]:
         B, T, _ = cls.shape
         if T > self.seq_len:
@@ -457,6 +472,17 @@ class Cortex(nn.Module):
             mshift = patch_shift_estimate(patches) / MOTION_SHIFT_SCALE  # (B,T-1)
 
         prefixes = []
+        if self.use_goal:
+            if goal is None:
+                goal_tok = self.no_goal_emb.view(1, 1, -1).expand(B, 1, -1)
+            else:
+                projected = self.goal_proj(goal)
+                if goal_mask is not None:
+                    projected = torch.where(
+                        goal_mask[:, None], projected, self.no_goal_emb
+                    )
+                goal_tok = projected.unsqueeze(1)
+            prefixes.append(goal_tok + self.goal_pos.unsqueeze(0))
         if self.use_action_context:
             if action_context is None:
                 raise ValueError(
@@ -543,4 +569,5 @@ def cortex_from_args(args) -> Cortex:
         use_action_context=bool(a.get("action_context", False)),
         action_persistence_skip=bool(a.get("action_persistence_skip", False)),
         predict_taps=bool(a.get("tap_events", False)),
+        use_goal=bool(a.get("goal_conditioning", False)),
     )
