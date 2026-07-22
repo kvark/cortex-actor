@@ -48,6 +48,9 @@ The action-channel contract (key roster, held-state layout, mouse scales) lives 
 
 On Quake E1M1 under an engine-observed evaluation protocol (completion counted only on the engine's level-transition event), two independent N=20 Cortex batches reach pose proxies for the opening door, button room, and gate descent in 20/20 episodes. Their route-waypoint medians are 5 and 6 (maximum 9), with 28–32 kills per batch. Matched-duration released P2P-150M and NitroGen reference batches ($N=5$ each) have route median 1 and complete 0/5 episodes; Cortex also completes 0/20 in each batch. The route measure is heuristic, the reference batches are small, and NitroGen uses our custom gamepad-to-Quake adapter. Additional-map and mid-map results are mixed rather than a generalization claim. See the paper in [PDF](paper/cortex_quake_bc.pdf) or [Markdown](paper/cortex_quake_bc.md), the [machine-readable results](paper/results_data.json), and the exact [instrumented vkQuake source](https://github.com/kvark/vkQuake/tree/def85227e6089231f23c1fbc2ba5e9c454add833).
 
+The upload-ready arXiv source bundle and its checksum are in
+[paper/releases](paper/releases).
+
 ## License
 
 MIT. The DINOv3 encoder is downloaded separately from Meta under its own license; the Pixels2Play corpus belongs to Elefant AI.

@@ -2,7 +2,9 @@
   "schema": 2,
   "audited_on": "2026-07-22",
   "provenance": {
-    "status": "Values were audited against retained training and evaluation manifests and summaries; those evaluator artifacts are not included in this policy release."
+    "status": "Values were audited against retained training and evaluation manifests and summaries; those evaluator artifacts are not included in this policy release.",
+    "public_source_commit": "b4de4f66420df2c408ec42b5c01c91a088d8b63d",
+    "public_source_url": "https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d"
   },
   "corpus": {
     "recordings": 6849,

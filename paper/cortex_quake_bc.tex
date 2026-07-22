@@ -18,7 +18,7 @@
 \author{Dzmitry Malyshau}
 \date{%
 July 2026\\[4pt]
-\small Code: \href{https://github.com/kvark/cortex-actor/tree/paper-v1}{\texttt{cortex-actor@paper-v1}} \;\textperiodcentered\;
+\small Code: \href{https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d}{\texttt{cortex-actor@b4de4f6}} \;\textperiodcentered\;
 Weights: \href{https://huggingface.co/mad-bot/cortex}{\texttt{mad-bot/cortex}} \;\textperiodcentered\;
 Video: \href{https://youtu.be/Ou9NAmFoCOM}{\texttt{youtu.be/Ou9NAmFoCOM}}}
 
@@ -308,11 +308,11 @@ Finally, total system cost includes the frozen encoder's pretraining and a proje
 \section*{Reproducibility and artifact availability}\label{sec:repro}
 \addcontentsline{toc}{section}{Reproducibility and artifact availability}
 
-The compact policy implementation and action schema are public at \url{https://github.com/kvark/cortex-actor}. The manuscript's code reference is the immutable \href{https://github.com/kvark/cortex-actor/tree/paper-v1}{\texttt{paper-v1} Git tag}. The exact evaluated release checkpoint is at \url{https://huggingface.co/mad-bot/cortex}; its SHA-256 is:
+The compact policy implementation, action schema, audited results, and figure generators are frozen at exact \href{https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d}{cortex-actor revision \texttt{b4de4f6}}. The submission manuscript and arXiv source archive are frozen by the \href{https://github.com/kvark/cortex-actor/tree/paper-v1}{\texttt{paper-v1} Git tag}. The exact evaluated release checkpoint is at \url{https://huggingface.co/mad-bot/cortex}; its SHA-256 is:
 \begin{center}
 \small\texttt{29c0e453fdfe7255bc6d8e64a0024fe9b617ed79917f5cd71b41f1173f1aa14b}
 \end{center}
-Its 86 tensors exactly match the selected step-30{,}000 training checkpoint; only optimizer state, RNG state, and local data paths are removed. The frozen DINOv3 encoder is obtained separately under Meta's license. The public P2P corpus and Quake shareware episode provide the demonstrations and game content used here. The tagged repository also contains the machine-readable result table and the sources used to generate the paper figures.
+Its 86 tensors exactly match the selected step-30{,}000 training checkpoint; only optimizer state, RNG state, and local data paths are removed. The frozen DINOv3 encoder is obtained separately under Meta's license. The public P2P corpus and Quake shareware episode provide the demonstrations and game content used here.
 
 The public release does not contain the full feature-extraction, training, or game-execution pipeline. Evaluation used \href{https://github.com/kvark/vkQuake/tree/def85227e6089231f23c1fbc2ba5e9c454add833}{vkQuake revision \texttt{def85227}}, whose read-only instrumentation exposes pose, health, kills, and intermission state to the evaluator; a separate runtime controlled simulated time. These signals never entered the policy. Cortex targets game-agnostic screen-and-input control, so this Quake adapter is an intermediate evaluation fixture rather than a policy dependency. The evaluator source is archived, but the complete runtime and retained evaluator artifact bundle are not; third-party pixel-to-game reproduction is therefore not yet turnkey.
 

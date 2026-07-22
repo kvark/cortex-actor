@@ -2,7 +2,7 @@
 
 Dzmitry Malyshau — July 2026
 
-[Code](https://github.com/kvark/cortex-actor/tree/paper-v1) · [Weights](https://huggingface.co/mad-bot/cortex) · [Video](https://youtu.be/Ou9NAmFoCOM)
+[Code (`b4de4f6`)](https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d) · [Weights](https://huggingface.co/mad-bot/cortex) · [Video](https://youtu.be/Ou9NAmFoCOM)
 
 ## Abstract
 
@@ -208,7 +208,7 @@ Total system cost includes DINOv3 pretraining and a projected approximately 23 G
 
 ## Reproducibility and artifact availability
 
-The compact policy and action schema are public in the [cortex-actor repository](https://github.com/kvark/cortex-actor). The manuscript’s code reference is the immutable [`paper-v1` Git tag](https://github.com/kvark/cortex-actor/tree/paper-v1). The exact evaluated checkpoint is on [Hugging Face](https://huggingface.co/mad-bot/cortex), SHA-256 `29c0e453fdfe7255bc6d8e64a0024fe9b617ed79917f5cd71b41f1173f1aa14b`. Its 86 tensors exactly match the selected step-30,000 training checkpoint; only optimizer/RNG state and local paths are removed. DINOv3 is obtained separately under Meta’s license. The public P2P corpus and Quake shareware episode supply the demonstrations and game content. The tagged repository also contains the machine-readable result table and the sources used to generate the paper figures.
+The compact policy implementation, action schema, audited results, and figure generators are frozen at exact [cortex-actor revision `b4de4f66420df2c408ec42b5c01c91a088d8b63d`](https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d). The submission manuscript and arXiv source archive are frozen by the [`paper-v1` Git tag](https://github.com/kvark/cortex-actor/tree/paper-v1). The exact evaluated checkpoint is on [Hugging Face](https://huggingface.co/mad-bot/cortex), SHA-256 `29c0e453fdfe7255bc6d8e64a0024fe9b617ed79917f5cd71b41f1173f1aa14b`. Its 86 tensors exactly match the selected step-30,000 training checkpoint; only optimizer/RNG state and local paths are removed. DINOv3 is obtained separately under Meta’s license. The public P2P corpus and Quake shareware episode supply the demonstrations and game content.
 
 The public release does not contain the full feature-extraction, training, or game-execution pipeline. Evaluation used [vkQuake revision `def85227e6089231f23c1fbc2ba5e9c454add833`](https://github.com/kvark/vkQuake/tree/def85227e6089231f23c1fbc2ba5e9c454add833), whose read-only instrumentation exposes pose, health, kills, and intermission state to the evaluator; a separate runtime controlled simulated time. These signals never entered the policy. Cortex targets game-agnostic screen-and-input control, so this Quake adapter is an intermediate evaluation fixture rather than a policy dependency. The evaluator source is archived, but the complete runtime and retained evaluator artifact bundle are not; third-party pixel-to-game reproduction is therefore not yet turnkey.
 
