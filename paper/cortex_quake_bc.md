@@ -244,9 +244,9 @@ The model implementation, training and evaluation tooling, experiments, and manu
 14. T. Zhao, V. Kumar, S. Levine, and C. Finn. [“Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware.”](https://arxiv.org/abs/2304.13705) RSS, 2023.
 15. C. Chi, Z. Xu, S. Feng, E. Cousineau, Y. Du, B. Burchfiel, R. Tedrake, and S. Song. [“Diffusion Policy.”](https://arxiv.org/abs/2303.04137) RSS, 2023.
 16. S. Parisi et al. [“The Unsurprising Effectiveness of Pre-Trained Vision Models for Control.”](https://arxiv.org/abs/2203.03580) ICML, 2022.
-17. S. Nair et al. [“R3M.”](https://arxiv.org/abs/2203.12601) CoRL, 2023.
+17. S. Nair et al. [“R3M.”](https://arxiv.org/abs/2203.12601) CoRL, 2022.
 18. A. Majumdar et al. [“Where are we in the search for an Artificial Visual Cortex for Embodied Intelligence?”](https://arxiv.org/abs/2303.18240) NeurIPS, 2023.
-19. A. Mandlekar et al. [“What Matters in Learning from Offline Human Demonstrations for Robot Manipulation.”](https://arxiv.org/abs/2108.03298) CoRL, 2022.
+19. A. Mandlekar et al. [“What Matters in Learning from Offline Human Demonstrations for Robot Manipulation.”](https://arxiv.org/abs/2108.03298) CoRL, 2021.
 
 ## Appendix A: E1M1 route-waypoint heuristic
 
