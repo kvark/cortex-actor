@@ -9,6 +9,7 @@ silently choose different architectures.
 ``build_ego_history`` is the shared train/deploy feature builder for the
 optional pose-history branch.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -24,6 +25,7 @@ from .schema import N_KEYS, N_HELD_STATE
 # a game rule.
 DINO_PATCH_GRID = (25, 40)
 COMPACT_PATCH_GRID = (5, 8)
+MULTISCALE_PATCH_GRID = (10, 8)
 
 
 def register_tokens_to_grid(registers):
@@ -81,6 +83,60 @@ def sample_spatial_patches_torch(
     )
     return patches.index_select(-3, rows).index_select(-2, columns)
 
+
+def center_mean_spatial_patches_np(patches: np.ndarray) -> np.ndarray:
+    """Preserve compact center samples and append all-patch cell means.
+
+    The native 25x40 DINO grid partitions exactly into a 5x8 grid of 5x5
+    cells. The first five output rows are the production center samples; the
+    next five rows are cell means. This keeps the proven compact signal while
+    making every native patch contribute through a fixed, game-independent
+    summary.
+    """
+    if patches.shape[-3:-1] == MULTISCALE_PATCH_GRID:
+        return patches
+    if patches.shape[-3:-1] != DINO_PATCH_GRID:
+        raise ValueError(
+            "center-mean patches require a 25x40 native or 10x8 packed grid, "
+            f"got {patches.shape[-3:-1]}"
+        )
+    centers = sample_spatial_patches_np(patches, COMPACT_PATCH_GRID)
+    cells = patches.reshape(
+        *patches.shape[:-3],
+        COMPACT_PATCH_GRID[0],
+        DINO_PATCH_GRID[0] // COMPACT_PATCH_GRID[0],
+        COMPACT_PATCH_GRID[1],
+        DINO_PATCH_GRID[1] // COMPACT_PATCH_GRID[1],
+        patches.shape[-1],
+    )
+    means = cells.mean(axis=(-4, -2))
+    return np.concatenate([centers, means], axis=-3)
+
+
+def center_mean_spatial_patches_torch(
+    patches: torch.Tensor,
+) -> torch.Tensor:
+    """Torch equivalent of :func:`center_mean_spatial_patches_np`."""
+    if patches.shape[-3:-1] == MULTISCALE_PATCH_GRID:
+        return patches
+    if patches.shape[-3:-1] != DINO_PATCH_GRID:
+        raise ValueError(
+            "center-mean patches require a 25x40 native or 10x8 packed grid, "
+            f"got {patches.shape[-3:-1]}"
+        )
+    centers = sample_spatial_patches_torch(patches, COMPACT_PATCH_GRID)
+    cells = patches.reshape(
+        *patches.shape[:-3],
+        COMPACT_PATCH_GRID[0],
+        DINO_PATCH_GRID[0] // COMPACT_PATCH_GRID[0],
+        COMPACT_PATCH_GRID[1],
+        DINO_PATCH_GRID[1] // COMPACT_PATCH_GRID[1],
+        patches.shape[-1],
+    )
+    means = cells.mean(dim=(-4, -2))
+    return torch.cat([centers, means], dim=-3)
+
+
 # Bin edges for mouse classification (mouse_mode='bins').
 # Edges define n+1 boundaries for n bins on normalized [-1, 1].
 # Asymmetric edges around 0 because P2P mouse distribution is heavy near 0.
@@ -120,15 +176,9 @@ def cortex_feature_flags(args) -> tuple[bool, bool]:
         use_patches = a["vision_tokens"] != "cls"
     else:
         use_patches = (
-            not bool(a["no_patches"])
-            if "no_patches" in a
-            else bool(a.get("use_patches", False))
+            not bool(a["no_patches"]) if "no_patches" in a else bool(a.get("use_patches", False))
         )
-    use_ego = (
-        not bool(a["no_ego"])
-        if "no_ego" in a
-        else bool(a.get("use_ego", False))
-    )
+    use_ego = not bool(a["no_ego"]) if "no_ego" in a else bool(a.get("use_ego", False))
     return use_patches, use_ego
 
 
@@ -148,9 +198,7 @@ def upgrade_legacy_cortex_state_dict(state_dict):
     upgraded["key_head.weight"] = torch.cat(
         [weight, weight.new_zeros(extra, weight.shape[1])], dim=0
     )
-    upgraded["key_head.bias"] = torch.cat(
-        [bias, bias.new_zeros(extra)], dim=0
-    )
+    upgraded["key_head.bias"] = torch.cat([bias, bias.new_zeros(extra)], dim=0)
     return upgraded
 
 
@@ -197,16 +245,16 @@ def patch_shift_estimate(patches: torch.Tensor, max_shift: int = 5) -> torch.Ten
     weight 10), so it is fed as an explicit input instead.
     """
     x = patches / (patches.norm(dim=-1, keepdim=True) + 1e-6)
-    A, B = x[:, :-1], x[:, 1:]                         # (B,T-1,H,W,C)
+    A, B = x[:, :-1], x[:, 1:]  # (B,T-1,H,W,C)
     W = A.shape[3]
     scores = []
     for s in range(-max_shift, max_shift + 1):
         if s >= 0:
-            sim = (A[:, :, :, s:] * B[:, :, :, :W - s]).sum(-1).mean((-1, -2))
+            sim = (A[:, :, :, s:] * B[:, :, :, : W - s]).sum(-1).mean((-1, -2))
         else:
-            sim = (A[:, :, :, :W + s] * B[:, :, :, -s:]).sum(-1).mean((-1, -2))
+            sim = (A[:, :, :, : W + s] * B[:, :, :, -s:]).sum(-1).mean((-1, -2))
         scores.append(sim)
-    S = torch.stack(scores, dim=-1)                    # (B,T-1,2*max_shift+1)
+    S = torch.stack(scores, dim=-1)  # (B,T-1,2*max_shift+1)
     smax = S.argmax(-1)
     lo = (smax - 1).clamp(min=0)
     hi = (smax + 1).clamp(max=2 * max_shift)
@@ -219,11 +267,11 @@ def patch_shift_estimate(patches: torch.Tensor, max_shift: int = 5) -> torch.Ten
 
 
 def build_ego_history(
-    pose_xyz: np.ndarray,   # (N, 3) CUT3R camera centers in world
-    pose_R: np.ndarray,     # (N, 3, 3) camera->world rotations
-    t: int,                 # current frame index
-    k: int = 16,            # number of strided history samples
-    horizon: int = 50,      # frames back the oldest sample reaches (5 s @ 10 fps)
+    pose_xyz: np.ndarray,  # (N, 3) CUT3R camera centers in world
+    pose_R: np.ndarray,  # (N, 3, 3) camera->world rotations
+    t: int,  # current frame index
+    k: int = 16,  # number of strided history samples
+    horizon: int = 50,  # frames back the oldest sample reaches (5 s @ 10 fps)
     pos_scale: float = 5.0,  # CUT3R is approximately metric; normalize to O(1)
     log_spaced: bool = False,  # see below
 ) -> np.ndarray:
@@ -288,6 +336,7 @@ class Cortex(nn.Module):
         use_patches: bool = True,
         use_ego: bool = True,
         patch_grid: tuple[int, int] = (25, 40),
+        multiscale_patches: bool = False,
         yaw_aux: bool = False,
         future_yaw: bool = False,
         motion_input: bool = False,
@@ -306,6 +355,12 @@ class Cortex(nn.Module):
         self.mouse_n_bins = int(mouse_n_bins)
         self.use_patches = use_patches
         self.patch_grid = tuple(patch_grid)
+        self.multiscale_patches = bool(multiscale_patches)
+        if self.multiscale_patches:
+            if not use_patches:
+                raise ValueError("multiscale patches require the patch branch")
+            if self.patch_grid != MULTISCALE_PATCH_GRID:
+                raise ValueError("multiscale patches require a 10x8 center-mean grid")
         self.n_patches = patch_grid[0] * patch_grid[1]
         self.tokens_per_frame = (1 + self.n_patches) if use_patches else 1
         assert mouse_mode in ("regress", "bins", "chunk"), mouse_mode
@@ -315,9 +370,7 @@ class Cortex(nn.Module):
         self.cls_proj = nn.Linear(384, d_model)
         if use_patches:
             self.patch_proj = nn.Linear(384, d_model)
-            self.spatial_pos = nn.Parameter(
-                torch.randn(self.tokens_per_frame, d_model) * 0.02
-            )
+            self.spatial_pos = nn.Parameter(torch.randn(self.tokens_per_frame, d_model) * 0.02)
         self.pos_emb = nn.Parameter(torch.randn(seq_len, d_model) * 0.02)
 
         # Egocentric history branch: project each step's 6-d feature to a token,
@@ -355,9 +408,7 @@ class Cortex(nn.Module):
             # Start from a generic persistence prior, then learn one strength
             # per universal held channel. The visual head only has to override
             # this skip on real press/release transitions.
-            self.action_persistence = nn.Parameter(
-                torch.full((N_HELD_STATE,), 2.0)
-            )
+            self.action_persistence = nn.Parameter(torch.full((N_HELD_STATE,), 2.0))
 
         layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -431,41 +482,43 @@ class Cortex(nn.Module):
             # sampling) — commitment lives in the sampler, not this head.
             self.mouse_chunk_head = nn.Linear(d_model + mouse_extra, self.chunk_codes)
             self.register_buffer(
-                "chunk_codebook",
-                torch.zeros(self.chunk_codes, self.chunk_horizon, 2))
+                "chunk_codebook", torch.zeros(self.chunk_codes, self.chunk_horizon, 2)
+            )
 
     def forward(
         self,
-        cls: torch.Tensor,                 # (B, T, 384)
-        ego: torch.Tensor | None = None,   # (B, K, EGO_FEAT_DIM); ignored if use_ego=False
+        cls: torch.Tensor,  # (B, T, 384)
+        ego: torch.Tensor | None = None,  # (B, K, EGO_FEAT_DIM); ignored if use_ego=False
         patches: torch.Tensor | None = None,  # (B, T, H, W, 384)
         return_hidden: bool = False,
         action_context: torch.Tensor | None = None,  # (B, N_HELD_STATE), previous state
-        goal: torch.Tensor | None = None,            # (B, 384) goal-frame CLS
-        goal_mask: torch.Tensor | None = None,       # (B,) bool; False -> no-goal placeholder
+        goal: torch.Tensor | None = None,  # (B, 384) goal-frame CLS
+        goal_mask: torch.Tensor | None = None,  # (B,) bool; False -> no-goal placeholder
     ) -> dict[str, torch.Tensor]:
         B, T, _ = cls.shape
         if T > self.seq_len:
-            cls = cls[:, -self.seq_len:]
+            cls = cls[:, -self.seq_len :]
             if patches is not None:
-                patches = patches[:, -self.seq_len:]
+                patches = patches[:, -self.seq_len :]
             T = self.seq_len
 
         if self.use_patches:
             assert patches is not None, "use_patches=True requires patches"
-            if patches.shape[-3:-1] != self.patch_grid:
+            if self.multiscale_patches:
+                patches = center_mean_spatial_patches_torch(patches)
+            elif patches.shape[-3:-1] != self.patch_grid:
                 patches = sample_spatial_patches_torch(patches, self.patch_grid)
             B_, T_, H, W, C = patches.shape
-            assert (H, W) == self.patch_grid, f"patches {(H,W)} != {self.patch_grid}"
+            assert (H, W) == self.patch_grid, f"patches {(H, W)} != {self.patch_grid}"
             patches_flat = patches.reshape(B, T, self.n_patches, 384)
-            cls_h = self.cls_proj(cls).unsqueeze(2)            # (B,T,1,d)
-            patches_h = self.patch_proj(patches_flat)          # (B,T,n_patches,d)
-            vis = torch.cat([cls_h, patches_h], dim=2)         # (B,T,tpf,d)
+            cls_h = self.cls_proj(cls).unsqueeze(2)  # (B,T,1,d)
+            patches_h = self.patch_proj(patches_flat)  # (B,T,n_patches,d)
+            vis = torch.cat([cls_h, patches_h], dim=2)  # (B,T,tpf,d)
             vis = vis + self.spatial_pos.view(1, 1, self.tokens_per_frame, vis.size(-1))
             vis = vis + self.pos_emb[:T].view(1, T, 1, vis.size(-1))
             vis = vis.reshape(B, T * self.tokens_per_frame, -1)
         else:
-            vis = self.cls_proj(cls) + self.pos_emb[:T]        # (B,T,d)
+            vis = self.cls_proj(cls) + self.pos_emb[:T]  # (B,T,d)
 
         mshift = None
         if self.motion_input:
@@ -478,16 +531,12 @@ class Cortex(nn.Module):
             else:
                 projected = self.goal_proj(goal)
                 if goal_mask is not None:
-                    projected = torch.where(
-                        goal_mask[:, None], projected, self.no_goal_emb
-                    )
+                    projected = torch.where(goal_mask[:, None], projected, self.no_goal_emb)
                 goal_tok = projected.unsqueeze(1)
             prefixes.append(goal_tok + self.goal_pos.unsqueeze(0))
         if self.use_action_context:
             if action_context is None:
-                raise ValueError(
-                    "this checkpoint requires the previously executed held state"
-                )
+                raise ValueError("this checkpoint requires the previously executed held state")
             action_tok = self.action_proj(action_context).unsqueeze(1)
             prefixes.append(action_tok + self.action_pos.unsqueeze(0))
         if self.use_ego:
@@ -509,15 +558,13 @@ class Cortex(nn.Module):
 
         held_logits = self.key_head(h_last)
         if self.action_persistence_skip:
-            held_logits = held_logits + self.action_persistence * (
-                2.0 * action_context - 1.0
-            )
+            held_logits = held_logits + self.action_persistence * (2.0 * action_context - 1.0)
         out = {"held_logits": held_logits}
         if self.predict_taps:
             out["tap_logits"] = self.tap_head(h_last)
         if self.yaw_aux or self.future_yaw:
             idxs = n_prefix + torch.arange(T, device=h.device) * self.tokens_per_frame
-            h_frames = self.ln_f(h[:, idxs])                    # (B, T, d)
+            h_frames = self.ln_f(h[:, idxs])  # (B, T, d)
             if self.motion_input:
                 # Per-frame shift, aligned so frame i sees the estimate for its
                 # own outgoing transition; the last frame (FUTURE target) sees
@@ -525,11 +572,11 @@ class Cortex(nn.Module):
                 sh = torch.cat([mshift, mshift[:, -1:]], dim=1).unsqueeze(-1)
                 h_frames = torch.cat([h_frames, sh], dim=-1)
             if self.yaw_aux:
-                out["yaw_pred"] = self.yaw_head(h_frames).squeeze(-1)   # (B, T)
+                out["yaw_pred"] = self.yaw_head(h_frames).squeeze(-1)  # (B, T)
             if self.future_yaw:
                 out["fyaw_logits"] = self.fyaw_head(h_frames)  # (B, T, 3)
         if return_hidden:
-            out["hidden"] = h_last                  # (B, d) — for the RL value head
+            out["hidden"] = h_last  # (B, d) — for the RL value head
         h_mouse = torch.cat([h_last, mshift], dim=-1) if self.motion_input else h_last
         if self.mouse_mode == "regress":
             out["mouse_dx"] = torch.tanh(self.mouse_dx_head(h_mouse).squeeze(-1)) * self.mouse_scale
@@ -557,11 +604,10 @@ def cortex_from_args(args) -> Cortex:
         mouse_mode=a.get("mouse_mode", "regress"),
         mouse_n_bins=int(a.get("mouse_n_bins", 9)),
         chunk_codes=int(a.get("chunk_codes", 64)),
-        chunk_horizon=int(
-            a.get("mouse_chunk_horizon", a.get("future_yaw_horizon", 10))
-        ),
+        chunk_horizon=int(a.get("mouse_chunk_horizon", a.get("future_yaw_horizon", 10))),
         use_patches=use_patches,
         patch_grid=patch_grid,
+        multiscale_patches=bool(a.get("multiscale_patches", False)),
         use_ego=use_ego,
         yaw_aux=float(a.get("yaw_aux_weight", 0.0)) > 0,
         future_yaw=float(a.get("future_yaw_weight", 0.0)) > 0,
