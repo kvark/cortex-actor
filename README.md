@@ -1,5 +1,6 @@
 # cortex-actor
 
+[![arXiv](https://img.shields.io/badge/arXiv-2607.22739-b31b1b.svg)](https://arxiv.org/abs/2607.22739)
 [![CI](https://github.com/kvark/cortex-actor/actions/workflows/ci.yml/badge.svg)](https://github.com/kvark/cortex-actor/actions/workflows/ci.yml)
 
 Cortex is a compact behavioral-cloning game policy: **10.98M trainable parameters** over frozen [DINOv3 ViT-S+/16](https://huggingface.co/facebook/dinov3-vits16plus-pretrain-lvd1689m) features (about 39.7M parameters executed per decision including the frozen encoder). It is trained on the ~474.7-hour Quake subset of the public [Pixels2Play corpus](https://huggingface.co/datasets/elefantai/p2p-full-data). In our time-controlled E1M1 harness, two N=20 Cortex batches reliably reach the opening route regions and fight enemies, while five-episode released P2P-150M and NitroGen reference batches remain shallower. No evaluated system completes the level. The paper states the small-sample, native-interface, and custom NitroGen-adapter limitations explicitly.
@@ -46,10 +47,31 @@ The action-channel contract (key roster, held-state layout, mouse scales) lives 
 
 ## Results
 
-On Quake E1M1 under an engine-observed evaluation protocol (completion counted only on the engine's level-transition event), two independent N=20 Cortex batches reach pose proxies for the opening door, button room, and gate descent in 20/20 episodes. Their route-waypoint medians are 5 and 6 (maximum 9), with 28–32 kills per batch. Matched-duration released P2P-150M and NitroGen reference batches ($N=5$ each) have route median 1 and complete 0/5 episodes; Cortex also completes 0/20 in each batch. The route measure is heuristic, the reference batches are small, and NitroGen uses our custom gamepad-to-Quake adapter. Additional-map and mid-map results are mixed rather than a generalization claim. See the paper in [PDF](paper/cortex_quake_bc.pdf) or [Markdown](paper/cortex_quake_bc.md), the [machine-readable results](paper/results_data.json), and the exact [instrumented vkQuake source](https://github.com/kvark/vkQuake/tree/def85227e6089231f23c1fbc2ba5e9c454add833).
+On Quake E1M1 under an engine-observed evaluation protocol (completion counted only on the engine's level-transition event), two independent N=20 Cortex batches reach pose proxies for the opening door, button room, and gate descent in 20/20 episodes. Their route-waypoint medians are 5 and 6 (maximum 9), with 28–32 kills per batch. Matched-duration released P2P-150M and NitroGen reference batches ($N=5$ each) have route median 1 and complete 0/5 episodes; Cortex also completes 0/20 in each batch. The route measure is heuristic, the reference batches are small, and NitroGen uses our custom gamepad-to-Quake adapter. Additional-map and mid-map results are mixed rather than a generalization claim. See the paper on [arXiv](https://arxiv.org/abs/2607.22739), or in this repository as [PDF](paper/cortex_quake_bc.pdf) or [Markdown](paper/cortex_quake_bc.md), plus the [machine-readable results](paper/results_data.json) and the exact [instrumented vkQuake source](https://github.com/kvark/vkQuake/tree/def85227e6089231f23c1fbc2ba5e9c454add833).
 
 The upload-ready arXiv source bundle and its checksum are in
 [paper/releases](paper/releases).
+
+## Citation
+
+If you use Cortex, its checkpoint, or these results, please cite the paper:
+
+> Dzmitry Malyshau. *Cortex: Compact Behavior Cloning for Quake with Frozen Visual Features.* arXiv:2607.22739, 2026.
+
+```bibtex
+@misc{malyshau2026cortex,
+  title         = {Cortex: Compact Behavior Cloning for Quake with Frozen Visual Features},
+  author        = {Malyshau, Dzmitry},
+  year          = {2026},
+  eprint        = {2607.22739},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+  doi           = {10.48550/arXiv.2607.22739},
+  url           = {https://arxiv.org/abs/2607.22739}
+}
+```
+
+The evaluated artifacts are versioned separately from the manuscript: the manuscript and its arXiv source are frozen at the [`paper-v1`](https://github.com/kvark/cortex-actor/tree/paper-v1) tag, and the exact evaluated weights are the checkpoint on [Hugging Face](https://huggingface.co/mad-bot/cortex).
 
 ## License
 
