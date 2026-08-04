@@ -1,8 +1,8 @@
 {
-  "schema": 2,
-  "audited_on": "2026-07-22",
+  "schema": 3,
+  "audited_on": "2026-08-04",
   "provenance": {
-    "status": "Values were audited against retained training and evaluation manifests and summaries; those evaluator artifacts are not included in this policy release.",
+    "status": "Values were audited against retained training, evaluation, and inference-benchmark artifacts; those full artifacts are not included in this policy release.",
     "public_source_commit": "b4de4f66420df2c408ec42b5c01c91a088d8b63d",
     "public_source_url": "https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d"
   },
@@ -43,6 +43,71 @@
     "samples_per_second": 2601.0112738392045,
     "maximum_batch_size": 16,
     "partial_worker_tail_batch_sizes": [8, 8, 8, 8, 8, 8, 4, 4]
+  },
+  "inference_latency_rtx5080": {
+    "measured_on": "2026-08-04",
+    "protocol": {
+      "gpu": "NVIDIA GeForce RTX 5080",
+      "driver": "595.71.05",
+      "python": "3.12.13",
+      "torch": "2.13.0+cu130",
+      "cuda_runtime": "13.0",
+      "batch_size": 1,
+      "measured_iterations_per_system": 100,
+      "timing": "CUDA events around native inference and native vision module",
+      "reported_statistic": "p50; total p95 also reported",
+      "policy_definition": "per-sample total event time minus matching vision-module event time",
+      "decoding": "Cortex temperature 1.0; P2P checkpoint-native sampling; NitroGen CFG disabled",
+      "included": "model-owned tensor preparation, vision, policy, and native action generation",
+      "excluded": "capture, video decode, model-external CPU image preprocessing, game runtime, and input injection",
+      "input_frame_sha256": "a4381cff393a39284eda6a25017290fca016e54b3bfc0fcf89ce44bb74fd4094"
+    },
+    "systems": {
+      "cortex_compact": {
+        "checkpoint_sha256": "be9bc51e84c0dbebd4a767762d83e508ee90230a3cd73cd06afb986d27c3808a",
+        "warmup_iterations": 20,
+        "vision": "DINOv3 ViT-S+/16 at 640x400",
+        "policy": "six-layer Cortex over four frames and 5x8 patches",
+        "native_output": "one held-state and mouse decision",
+        "vision_p50_ms": 2.750991940498352,
+        "policy_p50_ms": 1.362879991531372,
+        "total_p50_ms": 4.114367961883545,
+        "total_p95_ms": 4.140708947181702
+      },
+      "cortex_full_dino": {
+        "checkpoint_sha256": "6cab8f29d38a2d6269c4d979180e4b450d2698f4ecc5ddf48806637ba3091cd8",
+        "warmup_iterations": 20,
+        "vision": "DINOv3 ViT-S+/16 at 640x400",
+        "policy": "six-layer Cortex over four frames and all 25x40 patches",
+        "native_output": "one held-state and mouse decision",
+        "vision_p50_ms": 2.7608959674835205,
+        "policy_p50_ms": 3.5920640230178833,
+        "total_p50_ms": 6.352240085601807,
+        "total_p95_ms": 6.378462314605713
+      },
+      "p2p_150m": {
+        "checkpoint_sha256": "2a3b43121144ca2d9c2b8aa605e313184c98ac5ef6d2c3b530c2d353d886c5bc",
+        "warmup_iterations": 210,
+        "vision": "trained EfficientNet-B0 stem and image-token MLP at 192x192",
+        "policy": "causal transformer with steady-state 200-frame KV cache and autoregressive action decode",
+        "native_output": "one keyboard and mouse decision",
+        "vision_p50_ms": 1.258176028728485,
+        "policy_p50_ms": 39.19004875421524,
+        "total_p50_ms": 40.44753646850586,
+        "total_p95_ms": 40.90915699005127
+      },
+      "nitrogen": {
+        "checkpoint_sha256": "a266f5fb9c7dbdcdf97216558d2d82075a9a994b824cda69afa9fd3280260a81",
+        "warmup_iterations": 10,
+        "vision": "fine-tuned SigLIP2-L/16 at 256x256",
+        "policy": "VL mixer and 16-step flow-matching decoder with CFG disabled",
+        "native_output": "one 18-action gamepad chunk",
+        "vision_p50_ms": 5.100320100784302,
+        "policy_p50_ms": 46.12440013885498,
+        "total_p50_ms": 51.224496841430664,
+        "total_p95_ms": 51.33514194488525
+      }
+    }
   },
   "e1m1_fresh_spawn_120s": {
     "cortex_production": {

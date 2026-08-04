@@ -1,6 +1,6 @@
 # Cortex: Compact Behavior Cloning for Quake with Frozen Visual Features
 
-Dzmitry Malyshau — July 2026
+Dzmitry Malyshau — August 2026
 
 [Code (`b4de4f6`)](https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d) · [Weights](https://huggingface.co/mad-bot/cortex) · [Video](https://youtu.be/Ou9NAmFoCOM)
 
@@ -99,9 +99,24 @@ Cortex and NitroGen use Quake sensitivity 6.0; P2P retains 3.5. The systems shar
 - **Artifacts:** videos were recorded and inspected. The retention policy later removed some raw videos after preserving contact sheets, telemetry, summaries, and manifests.
 - **Statistics:** binomial rates carry Wilson 95% intervals. Five-episode reference batches are descriptive and cannot establish a broad ranking.
 
-## 6. Results
+## 6. Inference performance on one RTX 5080
 
-### 6.1 E1M1 from a fresh spawn
+We measure the four evaluated pixel-to-action stacks on the same RTX 5080, in isolation, at batch size one. A retained E1M1 frame is converted once to each model’s native input; capture, video decoding, model-external CPU image preprocessing, game execution, and input injection are outside the timed region. The input tensor is already GPU-resident. We use each evaluator’s eager, model-native precision path, warm up Cortex for 20 calls, NitroGen for 10, and P2P for 210 so its 200-frame rolling KV cache is full, then record 100 calls with CUDA events. The vision interval brackets each implementation’s native visual module. “Policy/action” is the same-call residual and includes downstream tensor operations, policy inference, and native action generation. These are measurements of the evaluated implementations, not hardware-independent architectural lower bounds.
+
+![RTX 5080 batch-one inference latency](figures/inference_latency_rtx5080.png)
+
+| System | Vision p50 | Policy/action p50 | Total p50 | Total p95 | Native output |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Cortex 5×8 | 2.751 ms | 1.363 ms | **4.114 ms** | 4.141 ms | 1 decision |
+| Cortex 25×40 | 2.761 ms | 3.592 ms | 6.352 ms | 6.378 ms | 1 decision |
+| P2P-150M | 1.258 ms | 39.190 ms | 40.448 ms | 40.909 ms | 1 decision |
+| NitroGen | 5.100 ms | 46.124 ms | 51.224 ms | 51.335 ms | 18 actions |
+
+Compact Cortex takes 4.11 ms at p50. Consuming all 25×40 DINO patches raises its policy segment by only 2.23 ms and total latency to 6.35 ms. Thus the full-grid experiment’s approximately 30-fold training-throughput penalty is primarily a training and packed-data cost, not a comparable deployment penalty at batch one. P2P takes 40.45 ms per 20 Hz decision in this eager steady-state implementation. NitroGen takes 51.22 ms per 18-action chunk, or 2.85 ms per queued 60 Hz action when amortized, although chunked and single-decision policies are not equivalent control interfaces. All p95 values fit their native simulated-time coverage (100 ms Cortex, 50 ms P2P, 300 ms NitroGen), although time control imposes no wall-clock deadline.
+
+## 7. Results
+
+### 7.1 E1M1 from a fresh spawn
 
 ![E1M1 waypoint survival](figures/waypoint_survival.png)
 
@@ -135,7 +150,7 @@ In production, median maximum displacement is 1,481 units (maximum 2,526), media
 
 In these ten episodes, extending the earlier 60-second screens does not yield deeper progress. This rules out the shorter cutoff for these traces, not an intrinsic ceiling for either model.
 
-### 6.2 Exploratory additional maps
+### 7.2 Exploratory additional maps
 
 | Map | System | Chord median (best) | Kills | Died | Median survival |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -148,7 +163,7 @@ In these ten episodes, extending the earlier 60-second screens does not yield de
 
 One P2P episode on each map and one NitroGen episode on E1M3 ended in an environment truncation; all remain in the N=5 batches. Chord summaries use every episode with a valid pose sample, while survival uses observed duration up to death, time limit, or truncation. Cortex has the largest median displacement on both maps and more kills on E1M2; P2P has more kills and longer survival on E1M3. No evaluated episode completes either map. The small batches and three environment truncations make these mixed outcomes especially preliminary; they do not establish map generalization.
 
-### 6.3 Exploratory shared mid-map starts
+### 7.3 Exploratory shared mid-map starts
 
 | Start | System | Sorted route indices | Chord median (best) | New kills | Died | Median survival |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
@@ -161,7 +176,7 @@ One P2P episode on each map and one NitroGen episode on E1M3 ended in an environ
 
 Each save already contains one kill, so the table subtracts one per episode and reports only new kills. Cortex/A has only four episodes after a harness incident. Waypoint indices are order-independent and include the starting region. These results are diagnostic, not a robustness claim.
 
-## 7. Controlled ablations and failure analysis
+## 8. Controlled ablations and failure analysis
 
 Only comparisons with retained checkpoints, manifests, and rollout summaries are included. N=4 screens are elimination tests, not precise effect estimates.
 
@@ -176,7 +191,7 @@ Only comparisons with retained checkpoints, manifests, and rollout summaries are
 | Previous action, 50% dropout | N=20 | Route median 5.5, descent 19/20, kill incidence 17/20, deaths 16; production is 5, 20/20, 19/20, and 15. |
 | Failure-similarity sampling | paired N=20 | Median route 5→6 and deaths 15→10, but mean route 5.45→5.25, descent 20/20→18/20, kill incidence 19/20→16/20. |
 
-**Spatial detail changes the trade-off.** Full 25×40 features substantially improve combat and survival while slightly reducing route reliability. They also reduce measured training throughput from 2,601 to 87.7 examples/s and required an approximately 0.84 TB cache. The result supports a more efficient multiscale design; it does not support saying that spatial detail “does not help.”
+**Spatial detail changes the trade-off.** Full 25×40 features substantially improve combat and survival while slightly reducing route reliability. They also reduce measured training throughput from 2,601 to 87.7 examples/s and required an approximately 0.84 TB cache. In contrast, batch-one deployed inference rises only from 4.11 to 6.35 ms, so the large penalty is chiefly in training and packed-data handling. The result supports a more efficient multiscale design; it does not support saying that spatial detail “does not help.”
 
 **Offline metrics are insufficient selectors.** Longer optimization, more distinct windows, longer passive visual context, and denser patches all improve at least one held-out metric without consistently improving route behavior. This shows that the measured offline metrics are unreliable selectors here. It is not evidence of a general statistical anti-correlation.
 
@@ -188,7 +203,7 @@ Across the two production batches, stationary stretches never exceed 3.9 seconds
 
 **Exploratory visual odometry did not replace engine pose.** Before the retained evaluations, we tested two-frame DINOv3 odometry distilled from a monocular visual-odometry teacher as a game-agnostic progress signal. Successive prototypes mostly learned near-stationary predictions: translation improved only marginally over the stationary prior and rotation remained near it. The teacher labels were noisy; we suspect DINO’s semantic invariances and coarse patch grid were a poor match for frame-to-frame correspondence. The resulting signal was not reliable enough for route evaluation, none of the present results uses it, and the exploration is not included as a controlled quantitative result.
 
-## 8. Limitations and threats to validity
+## 9. Limitations and threats to validity
 
 No evaluated Cortex episode completes E1M1. The supported task statement is reliable early-route progress and combat, not level solving. The route score is an order-independent pose heuristic; only engine intermission is success. Door, button-room, and descent regions are not direct interaction events.
 
@@ -198,7 +213,9 @@ Additional-map and save-state experiments are exploratory N=4–5 studies with m
 
 Total system cost includes DINOv3 pretraining and a projected approximately 23 GPU-hours of feature extraction at the measured selective-encoder rate, neither of which appears in the 3.3-minute optimization headline.
 
-## 9. Next steps
+The latency comparison likewise describes one RTX 5080 and the eager code paths used by this evaluator. Component boundaries follow each native implementation, preprocessing outside the model is excluded, and NitroGen returns a chunk while the other systems return one decision. The figure therefore compares measured deployed calls, not optimized kernels, equal-horizon control work, energy use, or theoretical compute.
+
+## 10. Next steps
 
 1. **Corrective recovery data.** Deploy frozen BC and collect human takeovers in wall, corner, water, and post-combat failure states. P2P reports that less than 1% correction data mitigates deployment shift. Compare this against similarity-weighted sampling.
 2. **Efficient full-grid features.** Use a multiscale or pooling stem so all 25×40 patches contribute without flat attention’s ~30× throughput loss.

@@ -17,7 +17,7 @@
 \title{\textbf{Cortex: Compact Behavior Cloning for Quake\\with Frozen Visual Features}}
 \author{Dzmitry Malyshau}
 \date{%
-July 2026\\[4pt]
+August 2026\\[4pt]
 \small Code: \href{https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d}{\texttt{cortex-actor@b4de4f6}} \;\textperiodcentered\;
 Weights: \href{https://huggingface.co/mad-bot/cortex}{\texttt{mad-bot/cortex}} \;\textperiodcentered\;
 Video: \href{https://youtu.be/Ou9NAmFoCOM}{\texttt{youtu.be/Ou9NAmFoCOM}}}
@@ -126,6 +126,37 @@ Cortex and NitroGen use Quake sensitivity 6.0; P2P retains its documented 3.5. T
 \item \textbf{Batches}: each Cortex batch has 20 episodes (four lanes and five policy seeds), 120 simulated seconds, stochastic decoding, and no episode selection. Each reference has five matched-duration episodes. Videos were recorded and inspected; the retention policy later removed some raw videos after preserving contact sheets, telemetry, summaries, and manifests.
 \item \textbf{Statistics}: binomial rates carry Wilson 95\% intervals. We report every episode but do not run significance tests on route or combat metrics. Five-episode reference batches are descriptive and cannot establish a broad ranking.
 \end{itemize}
+
+\section{Inference performance on one RTX 5080}\label{sec:latency}
+
+We measure the four evaluated pixel-to-action stacks on the same RTX 5080, in isolation, at batch size one. A retained E1M1 frame is converted once to each model's native input; capture, video decoding, model-external CPU image preprocessing, game execution, and input injection are outside the timed region. The input tensor is already GPU-resident. We use each evaluator's eager, model-native precision path, warm up Cortex for 20 calls, NitroGen for 10, and P2P for 210 so its 200-frame rolling KV cache is full, then record 100 calls with CUDA events. The vision interval brackets each implementation's native visual module. ``Policy/action'' is the same-call residual and includes downstream tensor operations, policy inference, and native action generation. These are measurements of the evaluated implementations, not hardware-independent architectural lower bounds.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.95\linewidth]{inference_latency_rtx5080.pdf}
+\caption{Median batch-one inference latency on one RTX 5080. Bars use native component boundaries and native outputs; the black mark is total p95. NitroGen produces an 18-action chunk per call, whereas Cortex and P2P produce one decision.}
+\label{fig:latency}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrl}
+\toprule
+System & Vision p50 & Policy/action p50 & Total p50 & Total p95 & Native output \\
+\midrule
+Cortex 5\x8 & 2.751 & 1.363 & \textbf{4.114} & 4.141 & 1 decision \\
+Cortex 25\x40 & 2.761 & 3.592 & 6.352 & 6.378 & 1 decision \\
+P2P-150M & 1.258 & 39.190 & 40.448 & 40.909 & 1 decision \\
+NitroGen & 5.100 & 46.124 & 51.224 & 51.335 & 18 actions \\
+\bottomrule
+\end{tabular}
+\caption{RTX 5080 inference latency in milliseconds over 100 measured calls per system. Component medians are computed from paired per-call intervals; rounding accounts for any difference from the total.}
+\label{tab:latency}
+\end{table}
+
+Compact Cortex takes 4.11\,ms at p50. Consuming all 25\x40 DINO patches raises its policy segment by only 2.23\,ms and total latency to 6.35\,ms. Thus the full-grid experiment's approximately 30-fold training-throughput penalty is primarily a training and packed-data cost, not a comparable deployment penalty at batch one. P2P takes 40.45\,ms per 20\,Hz decision in this eager steady-state implementation. NitroGen takes 51.22\,ms per 18-action chunk, or 2.85\,ms per queued 60\,Hz action when amortized, although chunked and single-decision policies are not equivalent control interfaces. All p95 values fit their native simulated-time coverage (100\,ms Cortex, 50\,ms P2P, 300\,ms NitroGen), although time control imposes no wall-clock deadline.
 
 \section{Results}\label{sec:results}
 
@@ -271,7 +302,7 @@ Failure-similarity sampling & paired $N{=}20$ & Median route 5$\to$6 and deaths 
 \label{tab:negative}
 \end{table}
 
-\paragraph{Spatial detail changes the trade-off.} The full 25\x40 grid is not a simple regression: it substantially improves combat and survival while slightly reducing opening and route reliability. It also reduces measured training throughput from 2{,}601 to 87.7 examples/s and required an approximately 0.84\,TB packed cache in this implementation. The evidence supports retaining full spatial features for a more efficient multiscale design; it does not support the earlier claim that spatial detail ``does not help.''
+\paragraph{Spatial detail changes the trade-off.} The full 25\x40 grid is not a simple regression: it substantially improves combat and survival while slightly reducing opening and route reliability. It also reduces measured training throughput from 2{,}601 to 87.7 examples/s and required an approximately 0.84\,TB packed cache in this implementation. In contrast, batch-one deployed inference rises only from 4.11 to 6.35\,ms, so the large penalty is chiefly in training and packed-data handling. The evidence supports retaining full spatial features for a more efficient multiscale design; it does not support the earlier claim that spatial detail ``does not help.''
 
 \paragraph{Offline metrics are insufficient selectors.} Longer optimization, more distinct windows, longer passive visual context, and denser patches all improve at least one held-out imitation measure without consistently improving route behavior. This is evidence that the measured offline metrics are unreliable selectors in this experiment family. It is not evidence of a general statistical anti-correlation between offline and online performance.
 
@@ -292,6 +323,8 @@ The cross-system comparison is not architecture-controlled. Cortex is Quake-spec
 The additional maps and save-state starts are exploratory $N{=}4$--5 studies with mixed winners. Many ablations are $N{=}4$ screens. We selected the production checkpoint after iterative experimentation on this environment, so unreported researcher degrees of freedom remain even though the final two batches use fresh seeds. Some raw rollout videos were removed after visual inspection under the project's retention policy; summaries, telemetry, contact sheets, and manifests remain, but a permanent public artifact archive is not yet available.
 
 Finally, total system cost includes the frozen encoder's pretraining and a projected approximately 23 GPU-hours of one-time feature extraction at the measured selective-encoder rate, neither of which appears in the 3.3-minute policy-optimization headline.
+
+The latency comparison likewise describes one RTX 5080 and the eager code paths used by this evaluator. Component boundaries follow each native implementation, preprocessing outside the model is excluded, and NitroGen returns a chunk while the other systems return one decision. The figure therefore compares measured deployed calls, not optimized kernels, equal-horizon control work, energy use, or theoretical compute.
 
 \section{Next steps}\label{sec:future}
 
