@@ -19,7 +19,7 @@ The package deliberately excludes Python source, generated raster figures,
 the compiled manuscript, and build logs. The paper links to the public code
 repository instead.
 
-SHA-256: **0ce312c2ddc68b87460e3f2d38ad20d117c67cbff121cd83621e93595516b2c0**
+SHA-256: **5d45077d4ad1b1dde3c60770dcbd4beee275bc988d3fbba81eabc7771b123fc0**
 
 It was verified by extracting into an empty directory and compiling
 cortex_quake_bc.tex with pdfLaTeX.
