@@ -17,7 +17,15 @@ jobs:
       - name: Install (CPU torch)
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e . pytest ruff
+          pip install -e '.[paper]' pytest ruff
+      - name: Check paper products are untracked
+        run: |
+          if git ls-files | grep -Eq '^paper/(cortex_quake_bc\.pdf|figures/.*\.(pdf|png)|releases/.*\.tar\.gz)$'; then
+            echo 'Generated paper products must not be tracked.' >&2
+            exit 1
+          fi
+      - name: Generate paper figures
+        run: make figures
       - name: Lint
         run: ruff check .
       - name: Test

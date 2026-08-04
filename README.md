@@ -47,10 +47,11 @@ The action-channel contract (key roster, held-state layout, mouse scales) lives 
 
 ## Results
 
-On Quake E1M1 under an engine-observed evaluation protocol (completion counted only on the engine's level-transition event), two independent N=20 Cortex batches reach pose proxies for the opening door, button room, and gate descent in 20/20 episodes. Their route-waypoint medians are 5 and 6 (maximum 9), with 28–32 kills per batch. Matched-duration released P2P-150M and NitroGen reference batches ($N=5$ each) have route median 1 and complete 0/5 episodes; Cortex also completes 0/20 in each batch. The route measure is heuristic, the reference batches are small, and NitroGen uses our custom gamepad-to-Quake adapter. Additional-map and mid-map results are mixed rather than a generalization claim. See the paper on [arXiv](https://arxiv.org/abs/2607.22739), or in this repository as [PDF](paper/cortex_quake_bc.pdf) or [Markdown](paper/cortex_quake_bc.md), plus the [machine-readable results](paper/results_data.json) and the exact [instrumented vkQuake source](https://github.com/kvark/vkQuake/tree/def85227e6089231f23c1fbc2ba5e9c454add833).
+On Quake E1M1 under an engine-observed evaluation protocol (completion counted only on the engine's level-transition event), two independent N=20 Cortex batches reach pose proxies for the opening door, button room, and gate descent in 20/20 episodes. Their route-waypoint medians are 5 and 6 (maximum 9), with 28–32 kills per batch. Matched-duration released P2P-150M and NitroGen reference batches ($N=5$ each) have route median 1 and complete 0/5 episodes; Cortex also completes 0/20 in each batch. The route measure is heuristic, the reference batches are small, and NitroGen uses our custom gamepad-to-Quake adapter. Additional-map and mid-map results are mixed rather than a generalization claim. See the paper on [arXiv](https://arxiv.org/abs/2607.22739) ([PDF](https://arxiv.org/pdf/2607.22739)), or its source as [Markdown](paper/cortex_quake_bc.md), plus the [machine-readable results](paper/results_data.json) and the exact [instrumented vkQuake source](https://github.com/kvark/vkQuake/tree/def85227e6089231f23c1fbc2ba5e9c454add833).
 
-The upload-ready arXiv source bundle and its checksum are in
-[paper/releases](paper/releases).
+Install the optional plotting dependency with `pip install -e '.[paper]'`.
+Then `make paper` builds the figures and manuscript, while `make arxiv` also
+creates the ignored upload bundle. See [paper/releases](paper/releases).
 
 ## Citation
 
@@ -71,7 +72,7 @@ If you use Cortex, its checkpoint, or these results, please cite the paper:
 }
 ```
 
-The evaluated artifacts are versioned separately from the manuscript: the original submission is frozen at [`paper-v1`](https://github.com/kvark/cortex-actor/tree/paper-v1), the compact latency-augmented revision with final author metadata at [`paper-v2.2`](https://github.com/kvark/cortex-actor/tree/paper-v2.2), and the exact evaluated weights are the checkpoint on [Hugging Face](https://huggingface.co/mad-bot/cortex).
+The evaluated artifacts are versioned separately from the manuscript: the original submission is frozen at [`paper-v1`](https://github.com/kvark/cortex-actor/tree/paper-v1), the source-only compact revision at [`paper-v2.3`](https://github.com/kvark/cortex-actor/tree/paper-v2.3), and the exact evaluated weights are the checkpoint on [Hugging Face](https://huggingface.co/mad-bot/cortex).
 
 ## License
 

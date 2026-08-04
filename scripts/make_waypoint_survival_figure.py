@@ -62,7 +62,12 @@ def main() -> None:
     fig.tight_layout()
 
     out = repo / "paper" / "figures"
-    fig.savefig(out / "waypoint_survival.pdf", bbox_inches="tight")
+    out.mkdir(parents=True, exist_ok=True)
+    fig.savefig(
+        out / "waypoint_survival.pdf",
+        bbox_inches="tight",
+        metadata={"CreationDate": None, "ModDate": None},
+    )
     fig.savefig(out / "waypoint_survival.png", dpi=180, bbox_inches="tight")
 
 

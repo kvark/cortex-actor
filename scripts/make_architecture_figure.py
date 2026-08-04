@@ -186,8 +186,13 @@ def main() -> None:
 
     fig.tight_layout(pad=0.3)
     out = Path(__file__).resolve().parents[1] / "paper" / "figures"
-    for extension in ("pdf", "png"):
-        fig.savefig(out / f"architecture.{extension}", dpi=220, bbox_inches="tight")
+    out.mkdir(parents=True, exist_ok=True)
+    fig.savefig(
+        out / "architecture.pdf",
+        bbox_inches="tight",
+        metadata={"CreationDate": None, "ModDate": None},
+    )
+    fig.savefig(out / "architecture.png", dpi=220, bbox_inches="tight")
 
 
 if __name__ == "__main__":

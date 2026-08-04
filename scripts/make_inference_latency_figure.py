@@ -83,7 +83,12 @@ def main() -> None:
     fig.tight_layout()
 
     output = repo / "paper" / "figures"
-    fig.savefig(output / "inference_latency_rtx5080.pdf", bbox_inches="tight")
+    output.mkdir(parents=True, exist_ok=True)
+    fig.savefig(
+        output / "inference_latency_rtx5080.pdf",
+        bbox_inches="tight",
+        metadata={"CreationDate": None, "ModDate": None},
+    )
     fig.savefig(output / "inference_latency_rtx5080.png", dpi=200, bbox_inches="tight")
 
 

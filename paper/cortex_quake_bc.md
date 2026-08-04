@@ -49,7 +49,9 @@ Per 100 ms policy decision:
 - **Heads:** one linear head predicts 36 independent held-state logits (33 keys and three mouse buttons). Two linear heads predict tanh-squashed relative mouse dx/dy.
 - **Execution:** held states are sampled independently at temperature 1, masked by the game adapter’s legal schema, and differenced against the previously executed state to produce device events. There is no previous-action, pose, map, task-text, or privileged-observer input.
 
-![Cortex architecture](figures/architecture.png)
+*Generate the architecture figure with
+[`make_architecture_figure.py`](../scripts/make_architecture_figure.py), or run
+`make paper` for the complete rendered manuscript.*
 
 The released state dictionary contains exactly 10,975,142 policy parameters. DINOv3 ViT-S+/16 adds approximately 28.7M frozen parameters, so the pixel-to-action system executes about 39.7M parameters per decision. P2P-150M and NitroGen’s roughly 493M parameters include their visual stacks; these size labels are not matched compute measurements. We report both 10.98M trainable and 39.7M total and make no claim that parameter count alone causes the measured behavior.
 
@@ -103,7 +105,9 @@ Cortex and NitroGen use Quake sensitivity 6.0; P2P retains 3.5. The systems shar
 
 We measure the four evaluated pixel-to-action stacks on the same RTX 5080, in isolation, at batch size one. A retained E1M1 frame is converted once to each model’s native input; capture, video decoding, model-external CPU image preprocessing, game execution, and input injection are outside the timed region. The input tensor is already GPU-resident. We use each evaluator’s eager, model-native precision path, warm up Cortex for 20 calls, NitroGen for 10, and P2P for 210 so its 200-frame rolling KV cache is full, then record 100 calls with CUDA events. The vision interval brackets each implementation’s native visual module. “Policy/action” is the same-call residual and includes downstream tensor operations, policy inference, and native action generation. These are measurements of the evaluated implementations, not hardware-independent architectural lower bounds.
 
-![RTX 5080 batch-one inference latency](figures/inference_latency_rtx5080.png)
+*Generate the latency figure with
+[`make_inference_latency_figure.py`](../scripts/make_inference_latency_figure.py),
+or run `make paper` for the complete rendered manuscript.*
 
 | System | Vision p50 | Policy/action p50 | Total p50 | Total p95 | Native output |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -118,7 +122,9 @@ Compact Cortex takes 4.11 ms at p50. Consuming all 25×40 DINO patches raises it
 
 ### 7.1 E1M1 from a fresh spawn
 
-![E1M1 waypoint survival](figures/waypoint_survival.png)
+*Generate the waypoint-survival figure with
+[`make_waypoint_survival_figure.py`](../scripts/make_waypoint_survival_figure.py),
+or run `make paper` for the complete rendered manuscript.*
 
 | Metric | Cortex N=20 | Replication N=20 | P2P-150M N=5 | NitroGen N=5 |
 | --- | ---: | ---: | ---: | ---: |
@@ -225,7 +231,7 @@ The latency comparison likewise describes one RTX 5080 and the eager code paths 
 
 ## Reproducibility and artifact availability
 
-The evaluated compact policy implementation and action schema are frozen at exact [cortex-actor revision `b4de4f66420df2c408ec42b5c01c91a088d8b63d`](https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d). The audited results, latency data, and figure generators for this revision are at [revision `78f78760c3a4b4f145664dd2aa9dd89b553e4d8d`](https://github.com/kvark/cortex-actor/tree/78f78760c3a4b4f145664dd2aa9dd89b553e4d8d); the revised manuscript and arXiv source archive are frozen by the [`paper-v2.2` Git tag](https://github.com/kvark/cortex-actor/tree/paper-v2.2). The exact evaluated checkpoint is on [Hugging Face](https://huggingface.co/mad-bot/cortex), SHA-256 `29c0e453fdfe7255bc6d8e64a0024fe9b617ed79917f5cd71b41f1173f1aa14b`. Its 86 tensors exactly match the selected step-30,000 training checkpoint; only optimizer/RNG state and local paths are removed. DINOv3 is obtained separately under Meta’s license. The public P2P corpus and Quake shareware episode supply the demonstrations and game content.
+The evaluated compact policy implementation and action schema are frozen at exact [cortex-actor revision `b4de4f66420df2c408ec42b5c01c91a088d8b63d`](https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d). The audited results, latency data, and figure generators for this revision are at [revision `78f78760c3a4b4f145664dd2aa9dd89b553e4d8d`](https://github.com/kvark/cortex-actor/tree/78f78760c3a4b4f145664dd2aa9dd89b553e4d8d); the source-only revised manuscript is frozen by the [`paper-v2.3` Git tag](https://github.com/kvark/cortex-actor/tree/paper-v2.3). The exact evaluated checkpoint is on [Hugging Face](https://huggingface.co/mad-bot/cortex), SHA-256 `29c0e453fdfe7255bc6d8e64a0024fe9b617ed79917f5cd71b41f1173f1aa14b`. Its 86 tensors exactly match the selected step-30,000 training checkpoint; only optimizer/RNG state and local paths are removed. DINOv3 is obtained separately under Meta’s license. The public P2P corpus and Quake shareware episode supply the demonstrations and game content.
 
 The public release does not contain the full feature-extraction, training, or game-execution pipeline. Evaluation used [vkQuake revision `def85227e6089231f23c1fbc2ba5e9c454add833`](https://github.com/kvark/vkQuake/tree/def85227e6089231f23c1fbc2ba5e9c454add833), whose read-only instrumentation exposes pose, health, kills, and intermission state to the evaluator; a separate runtime controlled simulated time. These signals never entered the policy. Cortex targets game-agnostic screen-and-input control, so this Quake adapter is an intermediate evaluation fixture rather than a policy dependency. The evaluator source is archived, but the complete runtime and retained evaluator artifact bundle are not; third-party pixel-to-game reproduction is therefore not yet turnkey.
 
