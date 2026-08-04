@@ -3,8 +3,9 @@
   "audited_on": "2026-08-04",
   "provenance": {
     "status": "Values were audited against retained training, evaluation, and inference-benchmark artifacts; those full artifacts are not included in this policy release.",
-    "public_source_commit": "b4de4f66420df2c408ec42b5c01c91a088d8b63d",
-    "public_source_url": "https://github.com/kvark/cortex-actor/tree/b4de4f66420df2c408ec42b5c01c91a088d8b63d"
+    "evaluated_policy_commit": "b4de4f66420df2c408ec42b5c01c91a088d8b63d",
+    "public_source_commit": "78f78760c3a4b4f145664dd2aa9dd89b553e4d8d",
+    "public_source_url": "https://github.com/kvark/cortex-actor/tree/78f78760c3a4b4f145664dd2aa9dd89b553e4d8d"
   },
   "corpus": {
     "recordings": 6849,

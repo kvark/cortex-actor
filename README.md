@@ -71,7 +71,7 @@ If you use Cortex, its checkpoint, or these results, please cite the paper:
 }
 ```
 
-The evaluated artifacts are versioned separately from the manuscript: the manuscript and its arXiv source are frozen at the [`paper-v1`](https://github.com/kvark/cortex-actor/tree/paper-v1) tag, and the exact evaluated weights are the checkpoint on [Hugging Face](https://huggingface.co/mad-bot/cortex).
+The evaluated artifacts are versioned separately from the manuscript: the original submission is frozen at [`paper-v1`](https://github.com/kvark/cortex-actor/tree/paper-v1), this latency-augmented revision at [`paper-v2`](https://github.com/kvark/cortex-actor/tree/paper-v2), and the exact evaluated weights are the checkpoint on [Hugging Face](https://huggingface.co/mad-bot/cortex).
 
 ## License
 
