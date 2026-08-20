@@ -38,6 +38,29 @@ def test_forward_smoke():
     assert out["mouse_dy"].shape == (2,)
 
 
+def test_complete_action_codebook_forward():
+    model = Cortex(
+        d_model=24,
+        n_layers=1,
+        n_heads=4,
+        seq_len=2,
+        use_patches=False,
+        use_ego=False,
+        mouse_mode="regress",
+        action_codes=17,
+    ).eval()
+    cls = torch.randn(3, 2, 384)
+
+    with torch.no_grad():
+        out = model(cls)
+
+    assert set(out) == {"action_code_logits"}
+    assert out["action_code_logits"].shape == (3, 17)
+    assert model.action_code_held.shape == (17, N_HELD_STATE)
+    assert model.action_code_tap.shape == (17, N_HELD_STATE)
+    assert model.action_code_mouse.shape == (17, 2)
+
+
 def test_center_mean_is_identical_offline_and_live():
     patches = np.arange(2 * 25 * 40 * 3, dtype=np.float32).reshape(2, 25, 40, 3)
     offline = center_mean_spatial_patches_np(patches)

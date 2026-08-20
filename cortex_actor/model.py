@@ -315,10 +315,11 @@ def build_ego_history(
 
 
 class Cortex(nn.Module):
-    """CLS(+patches) vision tokens + K egocentric history tokens -> action.
+    """CLS(+patches) vision tokens + optional history tokens -> action.
 
-    Output (last frame only), matching CortexMini:
-      held_logits (B, N_HELD_STATE), mouse heads (regress or bins).
+    The baseline emits independent held-state and mouse heads.  When
+    ``action_codes`` is nonzero, one categorical head instead selects a
+    checkpoint-owned complete action (held state, transient taps and mouse).
     """
 
     def __init__(
@@ -344,6 +345,7 @@ class Cortex(nn.Module):
         action_persistence_skip: bool = False,
         predict_taps: bool = False,
         use_goal: bool = False,
+        action_codes: int = 0,
     ):
         super().__init__()
         self.seq_len = seq_len
@@ -353,6 +355,11 @@ class Cortex(nn.Module):
         self.n_held = N_HELD_STATE
         self.mouse_mode = mouse_mode
         self.mouse_n_bins = int(mouse_n_bins)
+        self.action_codes = int(action_codes)
+        if self.action_codes < 0:
+            raise ValueError("action_codes must be non-negative")
+        if self.action_codes and predict_taps:
+            raise ValueError("complete action codes already own transient taps")
         self.use_patches = use_patches
         self.patch_grid = tuple(patch_grid)
         self.multiscale_patches = bool(multiscale_patches)
@@ -456,34 +463,40 @@ class Cortex(nn.Module):
         if future_yaw:
             self.fyaw_head = nn.Linear(d_model + (1 if motion_input else 0), 3)
 
-        self.key_head = nn.Linear(d_model, N_HELD_STATE)
         self.predict_taps = bool(predict_taps)
-        if self.predict_taps:
-            # Resulting held state cannot represent a press+release contained
-            # in one decision interval. Preserve that transient device event
-            # with one small parallel head while keeping held-state BC simple.
-            self.tap_head = nn.Linear(d_model, N_HELD_STATE)
-        if mouse_mode == "regress":
-            self.mouse_dx_head = nn.Linear(d_model + mouse_extra, 1)
-            self.mouse_dy_head = nn.Linear(d_model + mouse_extra, 1)
-            for h in (self.mouse_dx_head, self.mouse_dy_head):
-                nn.init.zeros_(h.bias)
-                nn.init.normal_(h.weight, std=0.01)
-        elif mouse_mode == "bins":
-            self.mouse_dx_head = nn.Linear(d_model + mouse_extra, self.mouse_n_bins)
-            self.mouse_dy_head = nn.Linear(d_model + mouse_extra, self.mouse_n_bins)
+        if self.action_codes:
+            self.action_code_head = nn.Linear(d_model + mouse_extra, self.action_codes)
+            self.register_buffer("action_code_held", torch.zeros(self.action_codes, N_HELD_STATE))
+            self.register_buffer("action_code_tap", torch.zeros(self.action_codes, N_HELD_STATE))
+            self.register_buffer("action_code_mouse", torch.zeros(self.action_codes, 2))
         else:
-            # Chunk mode: classify the next short mouse trajectory into one of K
-            # fixed k-means templates (codebook built by the trainer from the
-            # corpus, stored as a buffer so it travels with the ckpt). Per-step
-            # sampling re-flips the direction coin 10x/s and cancels into yaw
-            # noise; a sampled template is a committed micro-trajectory. The
-            # actor holds a drawn code across steps (receding-horizon sticky
-            # sampling) — commitment lives in the sampler, not this head.
-            self.mouse_chunk_head = nn.Linear(d_model + mouse_extra, self.chunk_codes)
-            self.register_buffer(
-                "chunk_codebook", torch.zeros(self.chunk_codes, self.chunk_horizon, 2)
-            )
+            self.key_head = nn.Linear(d_model, N_HELD_STATE)
+            if self.predict_taps:
+                # Resulting held state cannot represent a press+release contained
+                # in one decision interval. Preserve that transient device event
+                # with one small parallel head while keeping held-state BC simple.
+                self.tap_head = nn.Linear(d_model, N_HELD_STATE)
+            if mouse_mode == "regress":
+                self.mouse_dx_head = nn.Linear(d_model + mouse_extra, 1)
+                self.mouse_dy_head = nn.Linear(d_model + mouse_extra, 1)
+                for h in (self.mouse_dx_head, self.mouse_dy_head):
+                    nn.init.zeros_(h.bias)
+                    nn.init.normal_(h.weight, std=0.01)
+            elif mouse_mode == "bins":
+                self.mouse_dx_head = nn.Linear(d_model + mouse_extra, self.mouse_n_bins)
+                self.mouse_dy_head = nn.Linear(d_model + mouse_extra, self.mouse_n_bins)
+            else:
+                # Chunk mode: classify the next short mouse trajectory into one of K
+                # fixed k-means templates (codebook built by the trainer from the
+                # corpus, stored as a buffer so it travels with the ckpt). Per-step
+                # sampling re-flips the direction coin 10x/s and cancels into yaw
+                # noise; a sampled template is a committed micro-trajectory. The
+                # actor holds a drawn code across steps (receding-horizon sticky
+                # sampling) — commitment lives in the sampler, not this head.
+                self.mouse_chunk_head = nn.Linear(d_model + mouse_extra, self.chunk_codes)
+                self.register_buffer(
+                    "chunk_codebook", torch.zeros(self.chunk_codes, self.chunk_horizon, 2)
+                )
 
     def forward(
         self,
@@ -556,12 +569,15 @@ class Cortex(nn.Module):
         h = self.transformer(h)
         h_last = self.ln_f(h[:, last_cls_idx])
 
-        held_logits = self.key_head(h_last)
-        if self.action_persistence_skip:
-            held_logits = held_logits + self.action_persistence * (2.0 * action_context - 1.0)
-        out = {"held_logits": held_logits}
-        if self.predict_taps:
-            out["tap_logits"] = self.tap_head(h_last)
+        if self.action_codes:
+            out = {}
+        else:
+            held_logits = self.key_head(h_last)
+            if self.action_persistence_skip:
+                held_logits = held_logits + self.action_persistence * (2.0 * action_context - 1.0)
+            out = {"held_logits": held_logits}
+            if self.predict_taps:
+                out["tap_logits"] = self.tap_head(h_last)
         if self.yaw_aux or self.future_yaw:
             idxs = n_prefix + torch.arange(T, device=h.device) * self.tokens_per_frame
             h_frames = self.ln_f(h[:, idxs])  # (B, T, d)
@@ -578,7 +594,9 @@ class Cortex(nn.Module):
         if return_hidden:
             out["hidden"] = h_last  # (B, d) — for the RL value head
         h_mouse = torch.cat([h_last, mshift], dim=-1) if self.motion_input else h_last
-        if self.mouse_mode == "regress":
+        if self.action_codes:
+            out["action_code_logits"] = self.action_code_head(h_mouse)
+        elif self.mouse_mode == "regress":
             out["mouse_dx"] = torch.tanh(self.mouse_dx_head(h_mouse).squeeze(-1)) * self.mouse_scale
             out["mouse_dy"] = torch.tanh(self.mouse_dy_head(h_mouse).squeeze(-1)) * self.mouse_scale
         elif self.mouse_mode == "bins":
@@ -616,4 +634,5 @@ def cortex_from_args(args) -> Cortex:
         action_persistence_skip=bool(a.get("action_persistence_skip", False)),
         predict_taps=bool(a.get("tap_events", False)),
         use_goal=bool(a.get("goal_conditioning", False)),
+        action_codes=int(a.get("action_codes", 0)),
     )
