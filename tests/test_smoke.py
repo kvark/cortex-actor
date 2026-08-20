@@ -61,6 +61,27 @@ def test_complete_action_codebook_forward():
     assert model.action_code_mouse.shape == (17, 2)
 
 
+def test_action_context_preserves_common_initialization():
+    kwargs = dict(
+        d_model=24,
+        n_layers=1,
+        n_heads=4,
+        seq_len=2,
+        use_patches=False,
+        use_ego=False,
+        mouse_mode="regress",
+        action_codes=17,
+    )
+    torch.manual_seed(5)
+    baseline = Cortex(**kwargs)
+    torch.manual_seed(5)
+    contextual = Cortex(**kwargs, use_action_context=True)
+
+    contextual_state = contextual.state_dict()
+    for name, value in baseline.state_dict().items():
+        torch.testing.assert_close(value, contextual_state[name])
+
+
 def test_center_mean_is_identical_offline_and_live():
     patches = np.arange(2 * 25 * 40 * 3, dtype=np.float32).reshape(2, 25, 40, 3)
     offline = center_mean_spatial_patches_np(patches)

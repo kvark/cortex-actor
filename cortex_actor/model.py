@@ -404,18 +404,13 @@ class Cortex(nn.Module):
 
         # Optional previous-action token. The minimal BC baseline omits it;
         # older contextual checkpoints reconstruct the branch from metadata.
+        # Its parameters are created after the common path below so enabling
+        # this ablation does not silently change shared initialization.
         self.use_action_context = use_action_context
-        if use_action_context:
-            self.action_proj = nn.Linear(N_HELD_STATE, d_model)
-            self.action_pos = nn.Parameter(torch.randn(1, d_model) * 0.02)
         self.action_persistence_skip = bool(action_persistence_skip)
         if self.action_persistence_skip:
             if not self.use_action_context:
                 raise ValueError("action persistence skip requires action context")
-            # Start from a generic persistence prior, then learn one strength
-            # per universal held channel. The visual head only has to override
-            # this skip on real press/release transitions.
-            self.action_persistence = nn.Parameter(torch.full((N_HELD_STATE,), 2.0))
 
         layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -497,6 +492,14 @@ class Cortex(nn.Module):
                 self.register_buffer(
                     "chunk_codebook", torch.zeros(self.chunk_codes, self.chunk_horizon, 2)
                 )
+        if self.use_action_context:
+            self.action_proj = nn.Linear(N_HELD_STATE, d_model)
+            self.action_pos = nn.Parameter(torch.randn(1, d_model) * 0.02)
+        if self.action_persistence_skip:
+            # Start from a generic persistence prior, then learn one strength
+            # per universal held channel. The visual head only has to override
+            # this skip on real press/release transitions.
+            self.action_persistence = nn.Parameter(torch.full((N_HELD_STATE,), 2.0))
 
     def forward(
         self,
