@@ -346,6 +346,8 @@ class Cortex(nn.Module):
         predict_taps: bool = False,
         use_goal: bool = False,
         action_codes: int = 0,
+        held_duration_groups: int = 0,
+        held_duration_bins: int = 0,
     ):
         super().__init__()
         self.seq_len = seq_len
@@ -358,6 +360,14 @@ class Cortex(nn.Module):
         self.action_codes = int(action_codes)
         if self.action_codes < 0:
             raise ValueError("action_codes must be non-negative")
+        self.held_duration_groups = int(held_duration_groups)
+        self.held_duration_bins = int(held_duration_bins)
+        if bool(self.held_duration_groups) != bool(self.held_duration_bins):
+            raise ValueError("held duration groups and bins must be enabled together")
+        if self.held_duration_groups < 0 or self.held_duration_bins < 0:
+            raise ValueError("held duration groups and bins must be non-negative")
+        if self.held_duration_bins and not self.action_codes:
+            raise ValueError("held duration prediction requires complete action codes")
         if self.action_codes and predict_taps:
             raise ValueError("complete action codes already own transient taps")
         self.use_patches = use_patches
@@ -500,6 +510,18 @@ class Cortex(nn.Module):
             # per universal held channel. The visual head only has to override
             # this skip on real press/release transitions.
             self.action_persistence = nn.Parameter(torch.full((N_HELD_STATE,), 2.0))
+        if self.held_duration_bins:
+            # This auxiliary is deliberately last and detached in forward:
+            # enabling it must not perturb initialization or gradients of the
+            # complete-action control policy.
+            self.held_duration_head = nn.Linear(
+                d_model + mouse_extra,
+                self.held_duration_groups * self.held_duration_bins,
+            )
+            self.register_buffer(
+                "action_code_held_group",
+                torch.zeros(self.action_codes, dtype=torch.long),
+            )
 
     def forward(
         self,
@@ -599,6 +621,12 @@ class Cortex(nn.Module):
         h_mouse = torch.cat([h_last, mshift], dim=-1) if self.motion_input else h_last
         if self.action_codes:
             out["action_code_logits"] = self.action_code_head(h_mouse)
+            if self.held_duration_bins:
+                out["held_duration_logits"] = self.held_duration_head(h_mouse.detach()).view(
+                    B,
+                    self.held_duration_groups,
+                    self.held_duration_bins,
+                )
         elif self.mouse_mode == "regress":
             out["mouse_dx"] = torch.tanh(self.mouse_dx_head(h_mouse).squeeze(-1)) * self.mouse_scale
             out["mouse_dy"] = torch.tanh(self.mouse_dy_head(h_mouse).squeeze(-1)) * self.mouse_scale
@@ -638,4 +666,6 @@ def cortex_from_args(args) -> Cortex:
         predict_taps=bool(a.get("tap_events", False)),
         use_goal=bool(a.get("goal_conditioning", False)),
         action_codes=int(a.get("action_codes", 0)),
+        held_duration_groups=int(a.get("held_duration_groups", 0)),
+        held_duration_bins=int(a.get("held_duration_bins", 0)),
     )
