@@ -1,4 +1,5 @@
 """Load released Cortex checkpoints from the Hugging Face Hub."""
+
 import torch
 
 from .model import cortex_from_args

@@ -54,9 +54,7 @@ def main() -> None:
         "step": ck.get("step"),
     }
     torch.save(out, args.dst)
-    size = sum(
-        v.numel() * v.element_size() for v in model.values() if torch.is_tensor(v)
-    )
+    size = sum(v.numel() * v.element_size() for v in model.values() if torch.is_tensor(v))
     print(f"wrote {args.dst}: {len(model)} tensors, {size / 1e6:.1f} MB of weights")
 
 

@@ -10,7 +10,6 @@ from .hub import from_hub
 from .model import (
     COMPACT_PATCH_GRID,
     DINO_PATCH_GRID,
-    MULTISCALE_PATCH_GRID,
     Cortex,
     cortex_from_args,
 )
@@ -28,7 +27,6 @@ from .schema import (
 __all__ = [
     "COMPACT_PATCH_GRID",
     "DINO_PATCH_GRID",
-    "MULTISCALE_PATCH_GRID",
     "Cortex",
     "cortex_from_args",
     "from_hub",

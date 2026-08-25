@@ -1,10 +1,10 @@
 """Cortex behavioral-cloning policy.
 
 The production baseline is deliberately small: a frozen DINOv3 token window,
-a transformer, direct held-state logits, and mouse prediction.  Spatial tokens,
-previous actions, and egocentric pose history are checkpoint-selected
-ablations implemented by the same model so training and deployment cannot
-silently choose different architectures.
+a transformer, direct held-state logits, and mouse prediction. Spatial tokens
+and egocentric pose history are checkpoint-selected inputs implemented by the
+same model so training and deployment cannot silently choose different
+architectures.
 
 ``build_ego_history`` is the shared train/deploy feature builder for the
 optional pose-history branch.
@@ -25,7 +25,6 @@ from .schema import N_KEYS, N_HELD_STATE
 # a game rule.
 DINO_PATCH_GRID = (25, 40)
 COMPACT_PATCH_GRID = (5, 8)
-MULTISCALE_PATCH_GRID = (10, 8)
 
 
 def register_tokens_to_grid(registers):
@@ -82,59 +81,6 @@ def sample_spatial_patches_torch(
         device=patches.device,
     )
     return patches.index_select(-3, rows).index_select(-2, columns)
-
-
-def center_mean_spatial_patches_np(patches: np.ndarray) -> np.ndarray:
-    """Preserve compact center samples and append all-patch cell means.
-
-    The native 25x40 DINO grid partitions exactly into a 5x8 grid of 5x5
-    cells. The first five output rows are the production center samples; the
-    next five rows are cell means. This keeps the proven compact signal while
-    making every native patch contribute through a fixed, game-independent
-    summary.
-    """
-    if patches.shape[-3:-1] == MULTISCALE_PATCH_GRID:
-        return patches
-    if patches.shape[-3:-1] != DINO_PATCH_GRID:
-        raise ValueError(
-            "center-mean patches require a 25x40 native or 10x8 packed grid, "
-            f"got {patches.shape[-3:-1]}"
-        )
-    centers = sample_spatial_patches_np(patches, COMPACT_PATCH_GRID)
-    cells = patches.reshape(
-        *patches.shape[:-3],
-        COMPACT_PATCH_GRID[0],
-        DINO_PATCH_GRID[0] // COMPACT_PATCH_GRID[0],
-        COMPACT_PATCH_GRID[1],
-        DINO_PATCH_GRID[1] // COMPACT_PATCH_GRID[1],
-        patches.shape[-1],
-    )
-    means = cells.mean(axis=(-4, -2))
-    return np.concatenate([centers, means], axis=-3)
-
-
-def center_mean_spatial_patches_torch(
-    patches: torch.Tensor,
-) -> torch.Tensor:
-    """Torch equivalent of :func:`center_mean_spatial_patches_np`."""
-    if patches.shape[-3:-1] == MULTISCALE_PATCH_GRID:
-        return patches
-    if patches.shape[-3:-1] != DINO_PATCH_GRID:
-        raise ValueError(
-            "center-mean patches require a 25x40 native or 10x8 packed grid, "
-            f"got {patches.shape[-3:-1]}"
-        )
-    centers = sample_spatial_patches_torch(patches, COMPACT_PATCH_GRID)
-    cells = patches.reshape(
-        *patches.shape[:-3],
-        COMPACT_PATCH_GRID[0],
-        DINO_PATCH_GRID[0] // COMPACT_PATCH_GRID[0],
-        COMPACT_PATCH_GRID[1],
-        DINO_PATCH_GRID[1] // COMPACT_PATCH_GRID[1],
-        patches.shape[-1],
-    )
-    means = cells.mean(dim=(-4, -2))
-    return torch.cat([centers, means], dim=-3)
 
 
 # Bin edges for mouse classification (mouse_mode='bins').
@@ -213,58 +159,6 @@ CHUNK_CODES = 64
 EGO_FEAT_DIM = 6
 EGO_FWD_AXIS = np.array([0.0, 0.0, 1.0], dtype=np.float32)  # CUT3R camera looks +Z
 
-# Yaw-aux normalization: corpus per-frame CUT3R yaw-delta std is ~0.197 rad.
-YAW_AUX_SCALE = 0.2
-# Future-yaw normalization: corpus 10-frame (1s) cumulative yaw std is ~0.98 rad.
-FUTURE_YAW_SCALE = 1.0
-# Big-turn class boundary for the 3-class future-yaw head (~20 deg over 1s),
-# matching the initiation-probe definition.
-FUTURE_YAW_THRESH = 0.35
-
-
-def yaw_deltas(pose_R: np.ndarray) -> np.ndarray:
-    """Per-transition camera yaw change (rad), length N-1. Rotation of the +Z
-    view axis in the camera xz plane between consecutive frames."""
-    R = pose_R.astype(np.float64)
-    rel = np.einsum("tij,tik->tjk", R[:-1], R[1:])
-    return np.arctan2(rel[:, 0, 2], rel[:, 2, 2]).astype(np.float32)
-
-
-# Motion-input normalization: big turns shift the patch grid by ~1-3 columns.
-MOTION_SHIFT_SCALE = 2.0
-
-
-@torch.no_grad()
-def patch_shift_estimate(patches: torch.Tensor, max_shift: int = 5) -> torch.Tensor:
-    """Horizontal patch-grid shift between consecutive frames, (B,T,H,W,C) ->
-    (B,T-1) in patch-column units (quadratic peak interpolation, ~[-5, 5]).
-
-    This is the naive cross-correlator that recovers camera turn direction at
-    0.84 sign-agreement from the stored DINOv3 patches — the trunk demonstrably
-    fails to learn this computation itself (yaw-aux probe: chance even at
-    weight 10), so it is fed as an explicit input instead.
-    """
-    x = patches / (patches.norm(dim=-1, keepdim=True) + 1e-6)
-    A, B = x[:, :-1], x[:, 1:]  # (B,T-1,H,W,C)
-    W = A.shape[3]
-    scores = []
-    for s in range(-max_shift, max_shift + 1):
-        if s >= 0:
-            sim = (A[:, :, :, s:] * B[:, :, :, : W - s]).sum(-1).mean((-1, -2))
-        else:
-            sim = (A[:, :, :, : W + s] * B[:, :, :, -s:]).sum(-1).mean((-1, -2))
-        scores.append(sim)
-    S = torch.stack(scores, dim=-1)  # (B,T-1,2*max_shift+1)
-    smax = S.argmax(-1)
-    lo = (smax - 1).clamp(min=0)
-    hi = (smax + 1).clamp(max=2 * max_shift)
-    y0 = S.gather(-1, lo.unsqueeze(-1)).squeeze(-1)
-    y1 = S.gather(-1, smax.unsqueeze(-1)).squeeze(-1)
-    y2 = S.gather(-1, hi.unsqueeze(-1)).squeeze(-1)
-    frac = 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2 + 1e-9)
-    frac = torch.where((smax > 0) & (smax < 2 * max_shift), frac, torch.zeros_like(frac))
-    return (smax - max_shift).float() + frac
-
 
 def build_ego_history(
     pose_xyz: np.ndarray,  # (N, 3) CUT3R camera centers in world
@@ -315,12 +209,7 @@ def build_ego_history(
 
 
 class Cortex(nn.Module):
-    """CLS(+patches) vision tokens + optional history tokens -> action.
-
-    The baseline emits independent held-state and mouse heads.  When
-    ``action_codes`` is nonzero, one categorical head instead selects a
-    checkpoint-owned complete action (held state, transient taps and mouse).
-    """
+    """CLS(+patches) vision tokens + optional history tokens -> action."""
 
     def __init__(
         self,
@@ -337,17 +226,7 @@ class Cortex(nn.Module):
         use_patches: bool = True,
         use_ego: bool = True,
         patch_grid: tuple[int, int] = (25, 40),
-        multiscale_patches: bool = False,
-        yaw_aux: bool = False,
-        future_yaw: bool = False,
-        motion_input: bool = False,
-        use_action_context: bool = False,
-        action_persistence_skip: bool = False,
         predict_taps: bool = False,
-        use_goal: bool = False,
-        action_codes: int = 0,
-        held_duration_groups: int = 0,
-        held_duration_bins: int = 0,
     ):
         super().__init__()
         self.seq_len = seq_len
@@ -357,27 +236,8 @@ class Cortex(nn.Module):
         self.n_held = N_HELD_STATE
         self.mouse_mode = mouse_mode
         self.mouse_n_bins = int(mouse_n_bins)
-        self.action_codes = int(action_codes)
-        if self.action_codes < 0:
-            raise ValueError("action_codes must be non-negative")
-        self.held_duration_groups = int(held_duration_groups)
-        self.held_duration_bins = int(held_duration_bins)
-        if bool(self.held_duration_groups) != bool(self.held_duration_bins):
-            raise ValueError("held duration groups and bins must be enabled together")
-        if self.held_duration_groups < 0 or self.held_duration_bins < 0:
-            raise ValueError("held duration groups and bins must be non-negative")
-        if self.held_duration_bins and not self.action_codes:
-            raise ValueError("held duration prediction requires complete action codes")
-        if self.action_codes and predict_taps:
-            raise ValueError("complete action codes already own transient taps")
         self.use_patches = use_patches
         self.patch_grid = tuple(patch_grid)
-        self.multiscale_patches = bool(multiscale_patches)
-        if self.multiscale_patches:
-            if not use_patches:
-                raise ValueError("multiscale patches require the patch branch")
-            if self.patch_grid != MULTISCALE_PATCH_GRID:
-                raise ValueError("multiscale patches require a 10x8 center-mean grid")
         self.n_patches = patch_grid[0] * patch_grid[1]
         self.tokens_per_frame = (1 + self.n_patches) if use_patches else 1
         assert mouse_mode in ("regress", "bins", "chunk"), mouse_mode
@@ -400,28 +260,6 @@ class Cortex(nn.Module):
             self.ego_proj = nn.Linear(EGO_FEAT_DIM, d_model)
             self.ego_pos = nn.Parameter(torch.randn(ego_k, d_model) * 0.02)
 
-        # Optional goal token: the DINOv3 CLS of a desired future view,
-        # hindsight-sampled during training. The goal is real data, not a
-        # learned latent — there is no codebook to collapse. When no goal is
-        # provided (goal dropout in training, unconditional deployment) a
-        # learned placeholder embedding takes the token's place, so the same
-        # checkpoint runs conditionally and unconditionally.
-        self.use_goal = use_goal
-        if use_goal:
-            self.goal_proj = nn.Linear(384, d_model)
-            self.goal_pos = nn.Parameter(torch.randn(1, d_model) * 0.02)
-            self.no_goal_emb = nn.Parameter(torch.zeros(d_model))
-
-        # Optional previous-action token. The minimal BC baseline omits it;
-        # older contextual checkpoints reconstruct the branch from metadata.
-        # Its parameters are created after the common path below so enabling
-        # this ablation does not silently change shared initialization.
-        self.use_action_context = use_action_context
-        self.action_persistence_skip = bool(action_persistence_skip)
-        if self.action_persistence_skip:
-            if not self.use_action_context:
-                raise ValueError("action persistence skip requires action context")
-
         layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=n_heads,
@@ -438,89 +276,33 @@ class Cortex(nn.Module):
         )
         self.ln_f = nn.LayerNorm(d_model)
 
-        # Motion input: per-transition patch-shift estimate (computed in
-        # forward from the patches themselves -> train/deploy bit-identical),
-        # concatenated DIRECTLY into the head inputs. Prepended motion tokens
-        # were tried first and failed: attention never learned to route them
-        # to the readouts (yaw head stayed at chance despite the answer being
-        # an input); the concat path is linear so the gradient is immediate.
-        self.motion_input = motion_input
-        if motion_input:
-            assert use_patches, "motion_input requires patches"
-        mouse_extra = (seq_len - 1) if motion_input else 0
-
-        # Yaw-aux: per-frame head predicting the camera yaw delta of the
-        # transition leaving each frame (frame i -> i+1, / YAW_AUX_SCALE).
-        # Deltas 0..T-2 are observable ego-motion (forces the trunk to extract
-        # turn direction from the frame stream); delta T-1 is the FUTURE,
-        # action-aligned turn. Train-only signal; deploy ignores it.
-        self.yaw_aux = yaw_aux
-        if yaw_aux:
-            self.yaw_head = nn.Linear(d_model + (1 if motion_input else 0), 1)
-
-        # Future-yaw: per-frame 3-class head over the CUMULATIVE camera yaw in
-        # the next H frames: right (< -thresh) / none / left (> +thresh).
-        # Classification, not regression: the predictable component of future
-        # yaw is small vs its std (~1 rad), so L1 regresses to ~0 and buries
-        # the direction signal (validated: 10k regression steps stayed at
-        # chance sign while a frozen-CLS classifier probe hit 0.57/0.61).
-        self.future_yaw = future_yaw
-        if future_yaw:
-            self.fyaw_head = nn.Linear(d_model + (1 if motion_input else 0), 3)
-
+        self.key_head = nn.Linear(d_model, N_HELD_STATE)
         self.predict_taps = bool(predict_taps)
-        if self.action_codes:
-            self.action_code_head = nn.Linear(d_model + mouse_extra, self.action_codes)
-            self.register_buffer("action_code_held", torch.zeros(self.action_codes, N_HELD_STATE))
-            self.register_buffer("action_code_tap", torch.zeros(self.action_codes, N_HELD_STATE))
-            self.register_buffer("action_code_mouse", torch.zeros(self.action_codes, 2))
+        if self.predict_taps:
+            # Resulting held state cannot represent a press+release contained
+            # in one decision interval. Preserve that transient device event
+            # with one small parallel head while keeping held-state BC simple.
+            self.tap_head = nn.Linear(d_model, N_HELD_STATE)
+        if mouse_mode == "regress":
+            self.mouse_dx_head = nn.Linear(d_model, 1)
+            self.mouse_dy_head = nn.Linear(d_model, 1)
+            for h in (self.mouse_dx_head, self.mouse_dy_head):
+                nn.init.zeros_(h.bias)
+                nn.init.normal_(h.weight, std=0.01)
+        elif mouse_mode == "bins":
+            self.mouse_dx_head = nn.Linear(d_model, self.mouse_n_bins)
+            self.mouse_dy_head = nn.Linear(d_model, self.mouse_n_bins)
         else:
-            self.key_head = nn.Linear(d_model, N_HELD_STATE)
-            if self.predict_taps:
-                # Resulting held state cannot represent a press+release contained
-                # in one decision interval. Preserve that transient device event
-                # with one small parallel head while keeping held-state BC simple.
-                self.tap_head = nn.Linear(d_model, N_HELD_STATE)
-            if mouse_mode == "regress":
-                self.mouse_dx_head = nn.Linear(d_model + mouse_extra, 1)
-                self.mouse_dy_head = nn.Linear(d_model + mouse_extra, 1)
-                for h in (self.mouse_dx_head, self.mouse_dy_head):
-                    nn.init.zeros_(h.bias)
-                    nn.init.normal_(h.weight, std=0.01)
-            elif mouse_mode == "bins":
-                self.mouse_dx_head = nn.Linear(d_model + mouse_extra, self.mouse_n_bins)
-                self.mouse_dy_head = nn.Linear(d_model + mouse_extra, self.mouse_n_bins)
-            else:
-                # Chunk mode: classify the next short mouse trajectory into one of K
-                # fixed k-means templates (codebook built by the trainer from the
-                # corpus, stored as a buffer so it travels with the ckpt). Per-step
-                # sampling re-flips the direction coin 10x/s and cancels into yaw
-                # noise; a sampled template is a committed micro-trajectory. The
-                # actor holds a drawn code across steps (receding-horizon sticky
-                # sampling) — commitment lives in the sampler, not this head.
-                self.mouse_chunk_head = nn.Linear(d_model + mouse_extra, self.chunk_codes)
-                self.register_buffer(
-                    "chunk_codebook", torch.zeros(self.chunk_codes, self.chunk_horizon, 2)
-                )
-        if self.use_action_context:
-            self.action_proj = nn.Linear(N_HELD_STATE, d_model)
-            self.action_pos = nn.Parameter(torch.randn(1, d_model) * 0.02)
-        if self.action_persistence_skip:
-            # Start from a generic persistence prior, then learn one strength
-            # per universal held channel. The visual head only has to override
-            # this skip on real press/release transitions.
-            self.action_persistence = nn.Parameter(torch.full((N_HELD_STATE,), 2.0))
-        if self.held_duration_bins:
-            # This auxiliary is deliberately last and detached in forward:
-            # enabling it must not perturb initialization or gradients of the
-            # complete-action control policy.
-            self.held_duration_head = nn.Linear(
-                d_model + mouse_extra,
-                self.held_duration_groups * self.held_duration_bins,
-            )
+            # Chunk mode: classify the next short mouse trajectory into one of K
+            # fixed k-means templates (codebook built by the trainer from the
+            # corpus, stored as a buffer so it travels with the ckpt). Per-step
+            # sampling re-flips the direction coin 10x/s and cancels into yaw
+            # noise; a sampled template is a committed micro-trajectory. The
+            # actor holds a drawn code across steps (receding-horizon sticky
+            # sampling) — commitment lives in the sampler, not this head.
+            self.mouse_chunk_head = nn.Linear(d_model, self.chunk_codes)
             self.register_buffer(
-                "action_code_held_group",
-                torch.zeros(self.action_codes, dtype=torch.long),
+                "chunk_codebook", torch.zeros(self.chunk_codes, self.chunk_horizon, 2)
             )
 
     def forward(
@@ -529,9 +311,6 @@ class Cortex(nn.Module):
         ego: torch.Tensor | None = None,  # (B, K, EGO_FEAT_DIM); ignored if use_ego=False
         patches: torch.Tensor | None = None,  # (B, T, H, W, 384)
         return_hidden: bool = False,
-        action_context: torch.Tensor | None = None,  # (B, N_HELD_STATE), previous state
-        goal: torch.Tensor | None = None,  # (B, 384) goal-frame CLS
-        goal_mask: torch.Tensor | None = None,  # (B,) bool; False -> no-goal placeholder
     ) -> dict[str, torch.Tensor]:
         B, T, _ = cls.shape
         if T > self.seq_len:
@@ -542,9 +321,7 @@ class Cortex(nn.Module):
 
         if self.use_patches:
             assert patches is not None, "use_patches=True requires patches"
-            if self.multiscale_patches:
-                patches = center_mean_spatial_patches_torch(patches)
-            elif patches.shape[-3:-1] != self.patch_grid:
+            if patches.shape[-3:-1] != self.patch_grid:
                 patches = sample_spatial_patches_torch(patches, self.patch_grid)
             B_, T_, H, W, C = patches.shape
             assert (H, W) == self.patch_grid, f"patches {(H, W)} != {self.patch_grid}"
@@ -558,25 +335,7 @@ class Cortex(nn.Module):
         else:
             vis = self.cls_proj(cls) + self.pos_emb[:T]  # (B,T,d)
 
-        mshift = None
-        if self.motion_input:
-            mshift = patch_shift_estimate(patches) / MOTION_SHIFT_SCALE  # (B,T-1)
-
         prefixes = []
-        if self.use_goal:
-            if goal is None:
-                goal_tok = self.no_goal_emb.view(1, 1, -1).expand(B, 1, -1)
-            else:
-                projected = self.goal_proj(goal)
-                if goal_mask is not None:
-                    projected = torch.where(goal_mask[:, None], projected, self.no_goal_emb)
-                goal_tok = projected.unsqueeze(1)
-            prefixes.append(goal_tok + self.goal_pos.unsqueeze(0))
-        if self.use_action_context:
-            if action_context is None:
-                raise ValueError("this checkpoint requires the previously executed held state")
-            action_tok = self.action_proj(action_context).unsqueeze(1)
-            prefixes.append(action_tok + self.action_pos.unsqueeze(0))
         if self.use_ego:
             ego_tok = self.ego_proj(ego) + self.ego_pos.unsqueeze(0)  # (B,K,d)
             prefixes.append(ego_tok)
@@ -594,47 +353,19 @@ class Cortex(nn.Module):
         h = self.transformer(h)
         h_last = self.ln_f(h[:, last_cls_idx])
 
-        if self.action_codes:
-            out = {}
-        else:
-            held_logits = self.key_head(h_last)
-            if self.action_persistence_skip:
-                held_logits = held_logits + self.action_persistence * (2.0 * action_context - 1.0)
-            out = {"held_logits": held_logits}
-            if self.predict_taps:
-                out["tap_logits"] = self.tap_head(h_last)
-        if self.yaw_aux or self.future_yaw:
-            idxs = n_prefix + torch.arange(T, device=h.device) * self.tokens_per_frame
-            h_frames = self.ln_f(h[:, idxs])  # (B, T, d)
-            if self.motion_input:
-                # Per-frame shift, aligned so frame i sees the estimate for its
-                # own outgoing transition; the last frame (FUTURE target) sees
-                # the most recent observable one — the continuation prior.
-                sh = torch.cat([mshift, mshift[:, -1:]], dim=1).unsqueeze(-1)
-                h_frames = torch.cat([h_frames, sh], dim=-1)
-            if self.yaw_aux:
-                out["yaw_pred"] = self.yaw_head(h_frames).squeeze(-1)  # (B, T)
-            if self.future_yaw:
-                out["fyaw_logits"] = self.fyaw_head(h_frames)  # (B, T, 3)
+        out = {"held_logits": self.key_head(h_last)}
+        if self.predict_taps:
+            out["tap_logits"] = self.tap_head(h_last)
         if return_hidden:
             out["hidden"] = h_last  # (B, d) — for the RL value head
-        h_mouse = torch.cat([h_last, mshift], dim=-1) if self.motion_input else h_last
-        if self.action_codes:
-            out["action_code_logits"] = self.action_code_head(h_mouse)
-            if self.held_duration_bins:
-                out["held_duration_logits"] = self.held_duration_head(h_mouse.detach()).view(
-                    B,
-                    self.held_duration_groups,
-                    self.held_duration_bins,
-                )
-        elif self.mouse_mode == "regress":
-            out["mouse_dx"] = torch.tanh(self.mouse_dx_head(h_mouse).squeeze(-1)) * self.mouse_scale
-            out["mouse_dy"] = torch.tanh(self.mouse_dy_head(h_mouse).squeeze(-1)) * self.mouse_scale
+        if self.mouse_mode == "regress":
+            out["mouse_dx"] = torch.tanh(self.mouse_dx_head(h_last).squeeze(-1)) * self.mouse_scale
+            out["mouse_dy"] = torch.tanh(self.mouse_dy_head(h_last).squeeze(-1)) * self.mouse_scale
         elif self.mouse_mode == "bins":
-            out["mouse_dx_bins"] = self.mouse_dx_head(h_mouse)
-            out["mouse_dy_bins"] = self.mouse_dy_head(h_mouse)
+            out["mouse_dx_bins"] = self.mouse_dx_head(h_last)
+            out["mouse_dy_bins"] = self.mouse_dy_head(h_last)
         else:
-            out["mouse_chunk_logits"] = self.mouse_chunk_head(h_mouse)  # (B, K)
+            out["mouse_chunk_logits"] = self.mouse_chunk_head(h_last)  # (B, K)
         return out
 
 
@@ -653,19 +384,9 @@ def cortex_from_args(args) -> Cortex:
         mouse_mode=a.get("mouse_mode", "regress"),
         mouse_n_bins=int(a.get("mouse_n_bins", 9)),
         chunk_codes=int(a.get("chunk_codes", 64)),
-        chunk_horizon=int(a.get("mouse_chunk_horizon", a.get("future_yaw_horizon", 10))),
+        chunk_horizon=int(a.get("mouse_chunk_horizon", CHUNK_HORIZON)),
         use_patches=use_patches,
         patch_grid=patch_grid,
-        multiscale_patches=bool(a.get("multiscale_patches", False)),
         use_ego=use_ego,
-        yaw_aux=float(a.get("yaw_aux_weight", 0.0)) > 0,
-        future_yaw=float(a.get("future_yaw_weight", 0.0)) > 0,
-        motion_input=bool(a.get("motion_input", False)),
-        use_action_context=bool(a.get("action_context", False)),
-        action_persistence_skip=bool(a.get("action_persistence_skip", False)),
         predict_taps=bool(a.get("tap_events", False)),
-        use_goal=bool(a.get("goal_conditioning", False)),
-        action_codes=int(a.get("action_codes", 0)),
-        held_duration_groups=int(a.get("held_duration_groups", 0)),
-        held_duration_bins=int(a.get("held_duration_bins", 0)),
     )
