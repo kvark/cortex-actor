@@ -33,6 +33,29 @@ def test_forward_smoke():
     assert out["mouse_dy"].shape == (2,)
 
 
+def test_joint_held_pattern_head_preserves_baseline_initialization():
+    args = {
+        "seq_len": 2,
+        "vision_tokens": "cls",
+        "no_ego": True,
+        "d_model": 24,
+        "n_layers": 1,
+        "n_heads": 4,
+    }
+    torch.manual_seed(17)
+    baseline = cortex_from_args(args)
+    torch.manual_seed(17)
+    patterned = cortex_from_args({**args, "held_pattern_codes": 5})
+
+    patterned_state = patterned.state_dict()
+    for name, value in baseline.state_dict().items():
+        torch.testing.assert_close(patterned_state[name], value)
+
+    output = patterned(torch.randn(3, 2, 384))
+    assert output["held_pattern_logits"].shape == (3, 5)
+    assert patterned.held_pattern_codebook.shape == (5, N_HELD_STATE)
+
+
 def test_pixel_forward_smoke():
     args = {
         "seq_len": 2,
