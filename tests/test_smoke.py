@@ -1,6 +1,14 @@
+import numpy as np
 import torch
 
-from cortex_actor import Cortex, PixelCortex, cortex_from_args, N_HELD_STATE
+from cortex_actor import (
+    Cortex,
+    N_HELD_STATE,
+    PixelCortex,
+    aggregate_spatial_patches_np,
+    aggregate_spatial_patches_torch,
+    cortex_from_args,
+)
 from cortex_actor.schema import KEYS, KEY_INDEX, N_KEYS
 
 
@@ -50,3 +58,15 @@ def test_pixel_forward_smoke():
     assert out["held_logits"].shape == (2, N_HELD_STATE)
     out["held_logits"].sum().backward()
     assert model.pixel_encoder.stages[0][0].weight.grad is not None
+
+
+def test_mean_patch_aggregation_matches_numpy_and_torch():
+    source = np.arange(2 * 10 * 16 * 3, dtype=np.float32).reshape(2, 10, 16, 3)
+    numpy_result = aggregate_spatial_patches_np(source, (5, 8), aggregation="mean")
+    torch_result = aggregate_spatial_patches_torch(
+        torch.from_numpy(source),
+        (5, 8),
+        aggregation="mean",
+    )
+
+    np.testing.assert_array_equal(numpy_result, torch_result.numpy())

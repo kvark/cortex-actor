@@ -84,6 +84,92 @@ def sample_spatial_patches_torch(
     return patches.index_select(-3, rows).index_select(-2, columns)
 
 
+def aggregate_spatial_patches_np(
+    patches: np.ndarray,
+    target_grid: tuple[int, int] = COMPACT_PATCH_GRID,
+    *,
+    aggregation: str = "sample",
+) -> np.ndarray:
+    """Reduce a spatial feature grid while preserving its row/column layout.
+
+    ``sample`` is the historical Cortex contract. ``mean`` gives every source
+    patch equal coverage without increasing the policy token count. Mean
+    pooling requires evenly divisible grids so its NumPy training path and
+    Torch deployment path have an exact, easily audited partition.
+    """
+
+    if aggregation == "sample":
+        return sample_spatial_patches_np(patches, target_grid)
+    if aggregation != "mean":
+        raise ValueError(f"unsupported spatial patch aggregation: {aggregation!r}")
+    source_grid = tuple(int(value) for value in patches.shape[-3:-1])
+    if source_grid == tuple(target_grid):
+        return patches
+    target_rows, target_columns = (int(value) for value in target_grid)
+    source_rows, source_columns = source_grid
+    if (
+        target_rows < 1
+        or target_columns < 1
+        or source_rows % target_rows
+        or source_columns % target_columns
+    ):
+        raise ValueError(
+            "mean spatial aggregation requires target dimensions that evenly "
+            f"divide the source grid: {source_grid} -> {tuple(target_grid)}"
+        )
+    row_block = source_rows // target_rows
+    column_block = source_columns // target_columns
+    reshaped = patches.reshape(
+        *patches.shape[:-3],
+        target_rows,
+        row_block,
+        target_columns,
+        column_block,
+        patches.shape[-1],
+    )
+    return reshaped.mean(axis=(-4, -2))
+
+
+def aggregate_spatial_patches_torch(
+    patches: torch.Tensor,
+    target_grid: tuple[int, int] = COMPACT_PATCH_GRID,
+    *,
+    aggregation: str = "sample",
+) -> torch.Tensor:
+    """Torch equivalent of :func:`aggregate_spatial_patches_np`."""
+
+    if aggregation == "sample":
+        return sample_spatial_patches_torch(patches, target_grid)
+    if aggregation != "mean":
+        raise ValueError(f"unsupported spatial patch aggregation: {aggregation!r}")
+    source_grid = tuple(int(value) for value in patches.shape[-3:-1])
+    if source_grid == tuple(target_grid):
+        return patches
+    target_rows, target_columns = (int(value) for value in target_grid)
+    source_rows, source_columns = source_grid
+    if (
+        target_rows < 1
+        or target_columns < 1
+        or source_rows % target_rows
+        or source_columns % target_columns
+    ):
+        raise ValueError(
+            "mean spatial aggregation requires target dimensions that evenly "
+            f"divide the source grid: {source_grid} -> {tuple(target_grid)}"
+        )
+    row_block = source_rows // target_rows
+    column_block = source_columns // target_columns
+    reshaped = patches.reshape(
+        *patches.shape[:-3],
+        target_rows,
+        row_block,
+        target_columns,
+        column_block,
+        patches.shape[-1],
+    )
+    return reshaped.mean(dim=(-4, -2))
+
+
 # Bin edges for mouse classification (mouse_mode='bins').
 # Edges define n+1 boundaries for n bins on normalized [-1, 1].
 # Asymmetric edges around 0 because P2P mouse distribution is heavy near 0.
@@ -227,6 +313,7 @@ class Cortex(nn.Module):
         use_patches: bool = True,
         use_ego: bool = True,
         patch_grid: tuple[int, int] = (25, 40),
+        patch_aggregation: str = "sample",
         predict_taps: bool = False,
     ):
         super().__init__()
@@ -239,6 +326,9 @@ class Cortex(nn.Module):
         self.mouse_n_bins = int(mouse_n_bins)
         self.use_patches = use_patches
         self.patch_grid = tuple(patch_grid)
+        if patch_aggregation not in {"sample", "mean"}:
+            raise ValueError(f"unsupported spatial patch aggregation: {patch_aggregation!r}")
+        self.patch_aggregation = patch_aggregation
         self.n_patches = patch_grid[0] * patch_grid[1]
         self.tokens_per_frame = (1 + self.n_patches) if use_patches else 1
         assert mouse_mode in ("regress", "bins", "chunk"), mouse_mode
@@ -323,7 +413,11 @@ class Cortex(nn.Module):
         if self.use_patches:
             assert patches is not None, "use_patches=True requires patches"
             if patches.shape[-3:-1] != self.patch_grid:
-                patches = sample_spatial_patches_torch(patches, self.patch_grid)
+                patches = aggregate_spatial_patches_torch(
+                    patches,
+                    self.patch_grid,
+                    aggregation=self.patch_aggregation,
+                )
             B_, T_, H, W, C = patches.shape
             assert (H, W) == self.patch_grid, f"patches {(H, W)} != {self.patch_grid}"
             patches_flat = patches.reshape(B, T, self.n_patches, 384)
@@ -489,6 +583,7 @@ def cortex_from_args(args) -> Cortex:
         use_patches=use_patches,
         patch_grid=patch_grid,
         use_ego=use_ego,
+        patch_aggregation=str(a.get("patch_aggregation", "sample")),
         predict_taps=bool(a.get("tap_events", False)),
         **extra,
     )

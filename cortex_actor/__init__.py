@@ -13,6 +13,8 @@ from .model import (
     Cortex,
     PixelCortex,
     PixelSpatialEncoder,
+    aggregate_spatial_patches_np,
+    aggregate_spatial_patches_torch,
     cortex_from_args,
 )
 from .schema import (
@@ -32,6 +34,8 @@ __all__ = [
     "Cortex",
     "PixelCortex",
     "PixelSpatialEncoder",
+    "aggregate_spatial_patches_np",
+    "aggregate_spatial_patches_torch",
     "cortex_from_args",
     "from_hub",
     "KEYS",
