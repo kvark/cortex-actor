@@ -1,6 +1,6 @@
 import torch
 
-from cortex_actor import Cortex, cortex_from_args, N_HELD_STATE
+from cortex_actor import Cortex, PixelCortex, cortex_from_args, N_HELD_STATE
 from cortex_actor.schema import KEYS, KEY_INDEX, N_KEYS
 
 
@@ -31,3 +31,22 @@ def test_forward_smoke():
     assert out["held_logits"].shape == (2, N_HELD_STATE)
     assert out["mouse_dx"].shape == (2,)
     assert out["mouse_dy"].shape == (2,)
+
+
+def test_pixel_forward_smoke():
+    args = {
+        "seq_len": 2,
+        "vision_tokens": "pixels",
+        "patch_grid": [2, 3],
+        "no_ego": True,
+        "d_model": 24,
+        "n_layers": 1,
+        "n_heads": 4,
+        "pixel_encoder_width": 0.25,
+    }
+    model = cortex_from_args(args)
+    assert isinstance(model, PixelCortex)
+    out = model(torch.zeros(2, 2, 16, 24, 3, dtype=torch.uint8))
+    assert out["held_logits"].shape == (2, N_HELD_STATE)
+    out["held_logits"].sum().backward()
+    assert model.pixel_encoder.stages[0][0].weight.grad is not None

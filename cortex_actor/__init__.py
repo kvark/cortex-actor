@@ -11,6 +11,8 @@ from .model import (
     COMPACT_PATCH_GRID,
     DINO_PATCH_GRID,
     Cortex,
+    PixelCortex,
+    PixelSpatialEncoder,
     cortex_from_args,
 )
 from .schema import (
@@ -28,6 +30,8 @@ __all__ = [
     "COMPACT_PATCH_GRID",
     "DINO_PATCH_GRID",
     "Cortex",
+    "PixelCortex",
+    "PixelSpatialEncoder",
     "cortex_from_args",
     "from_hub",
     "KEYS",
