@@ -228,7 +228,6 @@ class Cortex(nn.Module):
         use_ego: bool = True,
         patch_grid: tuple[int, int] = (25, 40),
         predict_taps: bool = False,
-        held_pattern_codes: int = 0,
     ):
         super().__init__()
         self.seq_len = seq_len
@@ -245,9 +244,6 @@ class Cortex(nn.Module):
         assert mouse_mode in ("regress", "bins", "chunk"), mouse_mode
         self.chunk_codes = int(chunk_codes)
         self.chunk_horizon = int(chunk_horizon)
-        self.held_pattern_codes = int(held_pattern_codes)
-        if self.held_pattern_codes < 0:
-            raise ValueError("held_pattern_codes cannot be negative")
 
         self.cls_proj = nn.Linear(384, d_model)
         if use_patches:
@@ -310,16 +306,6 @@ class Cortex(nn.Module):
                 "chunk_codebook", torch.zeros(self.chunk_codes, self.chunk_horizon, 2)
             )
 
-        # Construct this optional head after every baseline module so enabling
-        # it does not perturb the seed-matched initialization of the shared
-        # encoder, transformer, key head, or mouse head.
-        if self.held_pattern_codes:
-            self.held_pattern_head = nn.Linear(d_model, self.held_pattern_codes)
-            self.register_buffer(
-                "held_pattern_codebook",
-                torch.zeros(self.held_pattern_codes, N_HELD_STATE),
-            )
-
     def forward(
         self,
         cls: torch.Tensor,  # (B, T, 384)
@@ -369,8 +355,6 @@ class Cortex(nn.Module):
         h_last = self.ln_f(h[:, last_cls_idx])
 
         out = {"held_logits": self.key_head(h_last)}
-        if self.held_pattern_codes:
-            out["held_pattern_logits"] = self.held_pattern_head(h_last)
         if self.predict_taps:
             out["tap_logits"] = self.tap_head(h_last)
         if return_hidden:
@@ -506,6 +490,5 @@ def cortex_from_args(args) -> Cortex:
         patch_grid=patch_grid,
         use_ego=use_ego,
         predict_taps=bool(a.get("tap_events", False)),
-        held_pattern_codes=int(a.get("held_pattern_codes", 0)),
         **extra,
     )
