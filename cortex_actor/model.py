@@ -19,7 +19,6 @@ import torch.nn.functional as F
 
 from .schema import N_KEYS, N_HELD_STATE
 
-
 # DINOv3 emits a 25x40 grid for the canonical 400x640 observation. A fixed 5x8
 # center sample preserves coarse spatial layout with 25x fewer tokens and is
 # shared by the dataset and live actor. This is a representation contract, not
@@ -228,6 +227,7 @@ class Cortex(nn.Module):
         use_ego: bool = True,
         patch_grid: tuple[int, int] = (25, 40),
         predict_taps: bool = False,
+        use_action_state: bool = False,
     ):
         super().__init__()
         self.seq_len = seq_len
@@ -244,6 +244,7 @@ class Cortex(nn.Module):
         assert mouse_mode in ("regress", "bins", "chunk"), mouse_mode
         self.chunk_codes = int(chunk_codes)
         self.chunk_horizon = int(chunk_horizon)
+        self.use_action_state = bool(use_action_state)
 
         self.cls_proj = nn.Linear(384, d_model)
         if use_patches:
@@ -306,12 +307,21 @@ class Cortex(nn.Module):
                 "chunk_codebook", torch.zeros(self.chunk_codes, self.chunk_horizon, 2)
             )
 
+        # Construct this optional input branch after every baseline module so
+        # shared parameters keep their exact seed-matched initialization. Its
+        # zero initialization also makes the initial additive conditioning an
+        # exact no-op without adding an attention token.
+        if self.use_action_state:
+            self.action_state_proj = nn.Linear(N_HELD_STATE, d_model, bias=False)
+            nn.init.zeros_(self.action_state_proj.weight)
+
     def forward(
         self,
         cls: torch.Tensor,  # (B, T, 384)
         ego: torch.Tensor | None = None,  # (B, K, EGO_FEAT_DIM); ignored if use_ego=False
         patches: torch.Tensor | None = None,  # (B, T, H, W, 384)
         return_hidden: bool = False,
+        causal_held: torch.Tensor | None = None,  # (B, N_HELD_STATE), pre-observation state
     ) -> dict[str, torch.Tensor]:
         B, T, _ = cls.shape
         if T > self.seq_len:
@@ -335,6 +345,14 @@ class Cortex(nn.Module):
             vis = vis.reshape(B, T * self.tokens_per_frame, -1)
         else:
             vis = self.cls_proj(cls) + self.pos_emb[:T]  # (B,T,d)
+
+        if self.use_action_state:
+            expected = (B, N_HELD_STATE)
+            if causal_held is None or tuple(causal_held.shape) != expected:
+                shape = None if causal_held is None else tuple(causal_held.shape)
+                raise ValueError(f"causal held state must have shape {expected}, got {shape}")
+            action_state = self.action_state_proj(causal_held.float()).to(vis.dtype)
+            vis = vis + action_state[:, None, :]
 
         prefixes = []
         if self.use_ego:
@@ -457,11 +475,18 @@ class PixelCortex(Cortex):
         ego: torch.Tensor | None = None,
         patches: torch.Tensor | None = None,
         return_hidden: bool = False,
+        causal_held: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         if patches is not None:
             raise ValueError("PixelCortex derives patches from pixels")
         cls, encoded_patches = self.pixel_encoder(pixels)
-        return super().forward(cls, ego, encoded_patches, return_hidden=return_hidden)
+        return super().forward(
+            cls,
+            ego,
+            encoded_patches,
+            return_hidden=return_hidden,
+            causal_held=causal_held,
+        )
 
 
 def cortex_from_args(args) -> Cortex:
@@ -490,5 +515,6 @@ def cortex_from_args(args) -> Cortex:
         patch_grid=patch_grid,
         use_ego=use_ego,
         predict_taps=bool(a.get("tap_events", False)),
+        use_action_state=bool(a.get("use_action_state", False)),
         **extra,
     )
