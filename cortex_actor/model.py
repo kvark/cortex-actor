@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
+from torch import nn
 
-from .schema import N_KEYS, N_HELD_STATE
-
+from .schema import N_HELD_STATE, N_KEYS
 
 # DINOv3 emits a 25x40 grid for the canonical 400x640 observation. A fixed 5x8
 # center sample preserves coarse spatial layout with 25x fewer tokens and is
@@ -199,8 +199,7 @@ def build_ego_history(
     feats = np.zeros((k, EGO_FEAT_DIM), dtype=np.float32)
     for j, off in enumerate(offsets):
         s = t - int(off)
-        if s < 0:
-            s = 0  # clamp to oldest available (spawn) — no fabricated history
+        s = max(s, 0)  # clamp to oldest available (spawn) — no fabricated history
         rel = RtT @ (pose_xyz[s].astype(np.float32) - pt)
         fdir = RtT @ (pose_R[s].astype(np.float32) @ EGO_FWD_AXIS)
         feats[j, :3] = rel / pos_scale
@@ -323,7 +322,7 @@ class Cortex(nn.Module):
             assert patches is not None, "use_patches=True requires patches"
             if patches.shape[-3:-1] != self.patch_grid:
                 patches = sample_spatial_patches_torch(patches, self.patch_grid)
-            B_, T_, H, W, C = patches.shape
+            _, _, H, W, _ = patches.shape
             assert (H, W) == self.patch_grid, f"patches {(H, W)} != {self.patch_grid}"
             patches_flat = patches.reshape(B, T, self.n_patches, 384)
             cls_h = self.cls_proj(cls).unsqueeze(2)  # (B,T,1,d)
@@ -369,12 +368,120 @@ class Cortex(nn.Module):
         return out
 
 
+class PixelResidualBlock(nn.Module):
+    """Small residual block used by the trainable RGB policy encoder."""
+
+    def __init__(self, channels: int):
+        super().__init__()
+        self.conv0 = nn.Conv2d(channels, channels, 3, padding=1)
+        self.conv1 = nn.Conv2d(channels, channels, 3, padding=1)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        hidden = F.relu(inputs)
+        hidden = self.conv0(hidden)
+        hidden = F.relu(hidden)
+        return inputs + self.conv1(hidden)
+
+
+class PixelSpatialEncoder(nn.Module):
+    """Trainable IMPALA-style RGB encoder retaining a compact spatial grid.
+
+    Used only when ``vision_tokens=pixels`` (PixelCortex). TrackMania and the
+    production BC baseline use frozen DINOv3 with a compact 5x8 patch grid.
+    """
+
+    def __init__(
+        self,
+        *,
+        output_dim: int = 384,
+        width: float = 1.0,
+        patch_grid: tuple[int, int] = COMPACT_PATCH_GRID,
+    ):
+        super().__init__()
+        if width <= 0:
+            raise ValueError("pixel encoder width must be positive")
+        channels = [max(1, int(base * width)) for base in (32, 64, 64)]
+        stages = []
+        input_channels = 3
+        for output_channels in channels:
+            stages.append(
+                nn.Sequential(
+                    nn.Conv2d(input_channels, output_channels, 3, padding=1),
+                    nn.MaxPool2d(3, stride=2, padding=1),
+                    PixelResidualBlock(output_channels),
+                    PixelResidualBlock(output_channels),
+                )
+            )
+            input_channels = output_channels
+        self.stages = nn.ModuleList(stages)
+        self.pool = nn.AdaptiveAvgPool2d(tuple(patch_grid))
+        self.output = nn.Conv2d(channels[-1], output_dim, 1)
+
+    def forward(self, pixels: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if pixels.ndim != 5:
+            raise ValueError("pixel input must have shape (batch, time, height, width, channels)")
+        batch, time, height, width, channels = pixels.shape
+        if channels != 3:
+            raise ValueError(f"pixel input must have three channels, got {channels}")
+        hidden = pixels.reshape(batch * time, height, width, channels)
+        hidden = hidden.permute(0, 3, 1, 2).float().div(127.5).sub(1.0)
+        for stage in self.stages:
+            hidden = stage(hidden)
+        hidden = self.output(self.pool(F.relu(hidden)))
+        patches = hidden.permute(0, 2, 3, 1).reshape(
+            batch,
+            time,
+            hidden.shape[-2],
+            hidden.shape[-1],
+            hidden.shape[1],
+        )
+        cls = patches.mean(dim=(-3, -2))
+        return cls, patches
+
+
+class PixelCortex(Cortex):
+    """Cortex whose spatial tokens are learned end-to-end from RGB frames.
+
+    Reconstruction path for ``vision_tokens=pixels`` checkpoints. TrackMania
+    uses frozen DINOv3 patches through :class:`Cortex`, not this encoder.
+    """
+
+    def __init__(self, *, pixel_encoder_width: float = 1.0, **kwargs):
+        if not kwargs.get("use_patches", True):
+            raise ValueError("PixelCortex requires spatial patch tokens")
+        super().__init__(**kwargs)
+        self.pixel_encoder_width = float(pixel_encoder_width)
+        self.pixel_encoder = PixelSpatialEncoder(
+            output_dim=384,
+            width=self.pixel_encoder_width,
+            patch_grid=self.patch_grid,
+        )
+
+    def forward(
+        self,
+        pixels: torch.Tensor,
+        ego: torch.Tensor | None = None,
+        patches: torch.Tensor | None = None,
+        return_hidden: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        if patches is not None:
+            raise ValueError("PixelCortex derives patches from pixels")
+        cls, encoded_patches = self.pixel_encoder(pixels)
+        return super().forward(cls, ego, encoded_patches, return_hidden=return_hidden)
+
+
 def cortex_from_args(args) -> Cortex:
     """Reconstruct the exact Cortex architecture recorded in a checkpoint."""
     a = vars(args) if hasattr(args, "__dict__") else args
     use_patches, use_ego = cortex_feature_flags(a)
     patch_grid = tuple(a.get("patch_grid") or DINO_PATCH_GRID)
-    return Cortex(
+    model_type = PixelCortex if a.get("vision_tokens") == "pixels" else Cortex
+    extra = (
+        {"pixel_encoder_width": float(a.get("pixel_encoder_width", 1.0))}
+        if model_type is PixelCortex
+        else {}
+    )
+    return model_type(
         d_model=int(a.get("d_model", 384)),
         n_layers=int(a.get("n_layers", 6)),
         n_heads=int(a.get("n_heads", 6)),
@@ -389,4 +496,5 @@ def cortex_from_args(args) -> Cortex:
         patch_grid=patch_grid,
         use_ego=use_ego,
         predict_taps=bool(a.get("tap_events", False)),
+        **extra,
     )

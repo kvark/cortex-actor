@@ -6,7 +6,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 SERIES = {
     "Cortex A (n=20)": "cortex_production",
     "Cortex B (n=20)": "cortex_replication",
