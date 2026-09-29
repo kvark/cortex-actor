@@ -8,7 +8,6 @@ import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
-
 SYSTEMS = (
     ("cortex_compact", "Cortex (5×8)"),
     ("cortex_full_dino", "Cortex (25×40)"),

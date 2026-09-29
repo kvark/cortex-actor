@@ -5,7 +5,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
-
 FROZEN = "#dbe9f4"
 FROZEN_EDGE = "#5b8db8"
 TRAIN = "#fdebd3"

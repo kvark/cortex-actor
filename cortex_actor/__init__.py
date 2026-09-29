@@ -16,8 +16,8 @@ from .model import (
     cortex_from_args,
 )
 from .schema import (
-    KEYS,
     KEY_INDEX,
+    KEYS,
     MOUSE_BUTTONS,
     MOUSE_DX_SCALE,
     MOUSE_DY_SCALE,
@@ -29,11 +29,6 @@ from .schema import (
 __all__ = [
     "COMPACT_PATCH_GRID",
     "DINO_PATCH_GRID",
-    "Cortex",
-    "PixelCortex",
-    "PixelSpatialEncoder",
-    "cortex_from_args",
-    "from_hub",
     "KEYS",
     "KEY_INDEX",
     "MOUSE_BUTTONS",
@@ -42,4 +37,9 @@ __all__ = [
     "N_HELD_STATE",
     "N_KEYS",
     "N_MOUSE_BUTTONS",
+    "Cortex",
+    "PixelCortex",
+    "PixelSpatialEncoder",
+    "cortex_from_args",
+    "from_hub",
 ]

@@ -1,7 +1,7 @@
 import torch
 
-from cortex_actor import Cortex, PixelCortex, cortex_from_args, N_HELD_STATE
-from cortex_actor.schema import KEYS, KEY_INDEX, N_KEYS
+from cortex_actor import N_HELD_STATE, Cortex, PixelCortex, cortex_from_args
+from cortex_actor.schema import KEY_INDEX, KEYS, N_KEYS
 
 
 def test_schema_contract():
